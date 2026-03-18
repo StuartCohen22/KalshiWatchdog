@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Kalshi Watchdog serverless scaffold
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 256
+    Timeout: 300
+    Architectures:
+      - arm64
+
+Resources:
+  TradesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-trades
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: ticker
+          AttributeType: S
+        - AttributeName: created_time
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ticker
+          KeyType: HASH
+        - AttributeName: created_time
+          KeyType: RANGE
+
+  MarketsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-markets
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: ticker
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: close_time
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ticker
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-close-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: close_time
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  AnomaliesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-anomalies
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: anomaly_id
+          AttributeType: S
+        - AttributeName: severity
+          AttributeType: S
+        - AttributeName: detected_at
+          AttributeType: S
+        - AttributeName: ticker
+          AttributeType: S
+      KeySchema:
+        - AttributeName: anomaly_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: severity-time-index
+          KeySchema:
+            - AttributeName: severity
+              KeyType: HASH
+            - AttributeName: detected_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ticker-time-index
+          KeySchema:
+            - AttributeName: ticker
+              KeyType: HASH
+            - AttributeName: detected_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
