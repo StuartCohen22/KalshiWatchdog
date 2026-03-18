@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from backend.utils.dynamo import batch_write_trades, get_settled_markets, get_traded_tickers
+from backend.utils.kalshi_client import fetch_trades
+
+
+def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
+    payload = event or {}
+    ticker = payload.get("ticker")
+    hours_back = int(payload.get("hours_back", 24))
+    market_limit = int(payload.get("market_limit", 25))
+    settled_only = bool(payload.get("settled_only", False))
+    all_history = bool(payload.get("all_history", False))
+    force = bool(payload.get("force", False))  # re-ingest even if trades already exist
+    ingested_tickers: list[str] = []
+
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=hours_back)
+
+    if settled_only and not ticker:
+        # Skip markets that already have trades unless force=True
+        already_ingested = set(get_traded_tickers()) if not force else set()
+
+        markets = get_settled_markets(limit=market_limit)
+        written = 0
+        for market in markets:
+            t = market.get("ticker")
+            if not t:
+                continue
+            if t in already_ingested:
+                continue
+            ingested_tickers.append(t)
+
+            if all_history:
+                open_raw = market.get("open_time") or market.get("created_time")
+                try:
+                    market_start = (
+                        datetime.fromisoformat(open_raw.replace("Z", "+00:00"))
+                        if open_raw
+                        else start_time
+                    )
+                except ValueError:
+                    market_start = start_time
+            else:
+                market_start = start_time
+
+            trades = fetch_trades(
+                ticker=t,
+                min_ts=int(market_start.timestamp()),
+                max_ts=int(end_time.timestamp()),
+            )
+            written += batch_write_trades(trades)
+    else:
+        trades = fetch_trades(
+            ticker=ticker,
+            min_ts=int(start_time.timestamp()),
+            max_ts=int(end_time.timestamp()),
+        )
+        written = batch_write_trades(trades)
+        if ticker:
+            ingested_tickers.append(ticker)
+
+    return {
+        "statusCode": 200,
+        "ingested": written,
+        "ticker": ticker,
+        "hours_back": hours_back,
+        "settled_only": settled_only,
+        "all_history": all_history,
+        "ingested_tickers": ingested_tickers,
+    }

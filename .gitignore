@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+node_modules/
+frontend/dist/
+coverage/
+local_data/
+
+# Secrets & credentials
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*private_key*
+*secret*
+Shmoney.txt
