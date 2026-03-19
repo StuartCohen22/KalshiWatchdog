@@ -5,13 +5,13 @@ import os
 from typing import Any
 import uuid
 
-from backend.detection import (
+from detection import (
     detect_coordinated_activity,
     detect_golden_window,
     detect_volume_spikes,
 )
-from backend.utils.bedrock import analyze_anomaly as analyze_anomaly_with_bedrock
-from backend.utils.dynamo import (
+from utils.bedrock import analyze_anomaly as analyze_anomaly_with_bedrock
+from utils.dynamo import (
     append_run_history,
     get_market,
     get_recent_settled_markets_with_trades,

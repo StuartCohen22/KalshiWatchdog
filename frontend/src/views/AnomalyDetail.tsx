@@ -118,7 +118,7 @@ function exportCaseFile(anomaly: AnomalyRecord, market: MarketRecord | null) {
   const now = new Date().toLocaleString();
   const sev = anomaly.severity;
   const sevColor: Record<string, string> = {
-    CRITICAL: "#ff3b5c", HIGH: "#ff8a4c", MEDIUM: "#fbbf24", LOW: "#94a3b8",
+    CRITICAL: "#ff2a6d", HIGH: "#ff9e64", MEDIUM: "#f59e0b", LOW: "#94a3b8",
   };
   const color = sevColor[sev] ?? "#94a3b8";
   const { headline, detail } = patternSummary(anomaly);

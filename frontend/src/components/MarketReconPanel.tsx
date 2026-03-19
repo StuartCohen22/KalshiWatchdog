@@ -43,7 +43,7 @@ function AnomalyBadge({ count, onClick }: { count: number; onClick: () => void }
     <button
       type="button"
       onClick={onClick}
-      className="shrink-0 rounded-full border border-[#ff3b5c]/30 bg-[rgba(255,59,92,0.1)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#ff3b5c] transition hover:bg-[rgba(255,59,92,0.18)]"
+      className="shrink-0 rounded-full border border-[#ff2a6d]/30 bg-[rgba(255,59,92,0.1)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#ff2a6d] transition hover:bg-[rgba(255,59,92,0.18)]"
     >
       {count} {count === 1 ? "flag" : "flags"}
     </button>
@@ -157,7 +157,7 @@ function MarketCard({
           <span className="text-xs text-text-tertiary">
             Spread: <span className="font-mono text-text-secondary">{market.yes_ask - market.yes_bid}¢</span>
             {market.yes_ask - market.yes_bid > 10 && (
-              <span className="ml-2 text-[#fbbf24]">wide</span>
+              <span className="ml-2 text-[#f59e0b]">wide</span>
             )}
           </span>
         </div>
@@ -207,7 +207,7 @@ function MarketCard({
             scanState === "done"
               ? "border-[var(--accent)]/40 text-[var(--accent)]"
               : scanState === "error"
-              ? "border-[#ff3b5c]/40 text-[#ff3b5c]"
+              ? "border-[#ff2a6d]/40 text-[#ff2a6d]"
               : "hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
           }`}
         >
@@ -217,7 +217,7 @@ function MarketCard({
 
       {/* Scan result */}
       {scanResult && (
-        <p className={`mt-2 text-xs ${scanState === "error" ? "text-[#ff3b5c]" : "text-text-tertiary"}`}>
+        <p className={`mt-2 text-xs ${scanState === "error" ? "text-[#ff2a6d]" : "text-text-tertiary"}`}>
           {scanResult}
           {scanState === "done" && (
             <> · <button type="button" className="text-[var(--accent)] hover:underline" onClick={() => navigate(`/search?q=${encodeURIComponent(market.ticker)}`)}>view trades →</button></>

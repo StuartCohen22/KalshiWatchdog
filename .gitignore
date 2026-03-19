@@ -16,3 +16,8 @@ local_data/
 *private_key*
 *secret*
 Shmoney.txt
+*credentials*.csv
+*.csv
+
+# AWS SAM build artifacts
+.aws-sam/

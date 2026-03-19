@@ -13,9 +13,9 @@ import type { AnomalyRecord, Severity } from "../types";
 const SEVERITY_ORDER: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
 const SEVERITY_COLORS: Record<Severity, string> = {
-  CRITICAL: "#ff3b5c",
-  HIGH: "#ff8a4c",
-  MEDIUM: "#fbbf24",
+  CRITICAL: "#ff2a6d",
+  HIGH: "#ff9e64",
+  MEDIUM: "#f59e0b",
   LOW: "#64748b",
 };
 

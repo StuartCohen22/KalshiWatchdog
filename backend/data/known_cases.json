@@ -1,0 +1,63 @@
+[
+  {
+    "id": "artem-kaptur-mrbeast",
+    "title": "MrBeast Editor Enforcement",
+    "date": "2025-08-01",
+    "subject": "Artem Kaptur",
+    "platform": "Kalshi",
+    "summary": "A MrBeast editor was sanctioned after trading on video-related markets with unusually accurate low-probability bets tied to insider production knowledge.",
+    "pattern": "Golden window",
+    "penalty": "$20,397.58 fine and 2-year suspension",
+    "markets": ["MrBeast video markets"],
+    "notes": "Kalshi publicly cited the case as a major example of insider-trading surveillance."
+  },
+  {
+    "id": "california-governor-candidate",
+    "title": "Candidate Self-Trading Case",
+    "date": "2025-05-01",
+    "subject": "California governor candidate",
+    "platform": "Kalshi",
+    "summary": "A candidate allegedly traded on his own candidacy, producing a clear conflict-of-interest pattern detectable through public reporting and trade timing.",
+    "pattern": "Direct conflict of interest",
+    "penalty": "$2,246.36 fine and 5-year ban",
+    "markets": ["California governor race markets"],
+    "notes": "The trader publicly referenced the activity, which accelerated detection."
+  },
+  {
+    "id": "maduro-capture-polymarket",
+    "title": "Maduro Capture Windfall",
+    "date": "2026-01-01",
+    "subject": "Anonymous trader",
+    "platform": "Polymarket",
+    "summary": "A trader reportedly made roughly $400K on capture markets shortly before public reporting, suggesting a sharp timing-information advantage.",
+    "pattern": "Massive low-probability volume spike",
+    "penalty": "No platform penalty publicly recorded here",
+    "markets": ["Maduro capture markets"],
+    "notes": "Included as a comparable cross-platform case for prediction-market surveillance."
+  },
+  {
+    "id": "israeli-military-betting",
+    "title": "Military Operations Betting Arrests",
+    "date": "2026-02-01",
+    "subject": "Several unnamed bettors",
+    "platform": "Polymarket",
+    "summary": "Authorities arrested participants accused of using classified military information to place prediction-market bets ahead of public events.",
+    "pattern": "Material non-public information",
+    "penalty": "Arrests and criminal charges reported",
+    "markets": ["Iran military operation markets"],
+    "notes": "Represents the national-security extreme of the same surveillance problem."
+  },
+  {
+    "id": "giannis-conflict",
+    "title": "Giannis Conflict-of-Interest Scrutiny",
+    "date": "2026-02-01",
+    "subject": "Giannis Antetokounmpo",
+    "platform": "Kalshi",
+    "summary": "A major athlete allegedly became financially tied to the platform amid heavy wagering on his own future, raising governance and fairness concerns.",
+    "pattern": "Platform conflict of interest",
+    "penalty": "No penalty recorded in the seed data",
+    "markets": ["NBA destination markets"],
+    "notes": "This is primarily a governance case, not a direct confirmed trade-surveillance case."
+  }
+]
+

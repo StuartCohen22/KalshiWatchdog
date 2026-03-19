@@ -25,9 +25,9 @@ const SEVERITY_NUM: Record<string, number> = {
 
 // Canvas-safe colors for the custom dot (CSS vars don't work inside SVG fill)
 const TYPE_COLOR_HEX: Record<string, string> = {
-  golden_window: "#ff3b5c",
-  coordinated: "#ff8a4c",
-  volume_spike: "#fbbf24",
+  golden_window: "#ff2a6d",
+  coordinated: "#ff9e64",
+  volume_spike: "#f59e0b",
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -74,7 +74,7 @@ function CustomDot(props: {
 }) {
   const { cx = 0, cy = 0, payload, onDotClick } = props;
   if (!payload) return null;
-  const fill = TYPE_COLOR_HEX[payload.type] ?? "#63dcbe";
+  const fill = TYPE_COLOR_HEX[payload.type] ?? "#00f0ff";
   const r = Math.max(Math.sqrt(payload.z / Math.PI), 4);
   return (
     <circle
@@ -115,7 +115,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payl
       <p style={{ color: "#64748b" }}>
         vol ${Math.round(d.volume).toLocaleString()}
       </p>
-      <p style={{ color: "#63dcbe", marginTop: 6, fontSize: 11 }}>Click to inspect →</p>
+      <p style={{ color: "#00f0ff", marginTop: 6, fontSize: 11 }}>Click to inspect →</p>
     </div>
   );
 }
@@ -178,7 +178,7 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
               label={{
                 value: "danger zone",
                 position: "insideTopLeft",
-                fill: "#ff3b5c",
+                fill: "#ff2a6d",
                 fontSize: 10,
                 fontFamily: "JetBrains Mono",
               }}
@@ -187,12 +187,12 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
             {/* Resolution line */}
             <ReferenceLine
               x={0}
-              stroke="#ff3b5c"
+              stroke="#ff2a6d"
               strokeDasharray="4 3"
               label={{
                 value: "resolution",
                 position: "insideTopRight",
-                fill: "#ff3b5c",
+                fill: "#ff2a6d",
                 fontSize: 10,
                 fontFamily: "JetBrains Mono",
               }}

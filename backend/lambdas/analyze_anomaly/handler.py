@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from backend.utils.bedrock import analyze_anomaly
-from backend.utils.dynamo import get_anomaly, get_market, update_anomaly_analysis
+from utils.bedrock import analyze_anomaly
+from utils.dynamo import get_anomaly, get_market, update_anomaly_analysis
 
 
 def _extract_anomaly_id(event: dict[str, Any]) -> str | None:

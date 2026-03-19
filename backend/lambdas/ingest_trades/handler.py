@@ -1,10 +1,32 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from backend.utils.dynamo import batch_write_trades, get_settled_markets, get_traded_tickers
-from backend.utils.kalshi_client import fetch_trades
+from utils.dynamo import batch_write_trades, get_settled_markets, get_traded_tickers
+from utils.kalshi_client import fetch_trades
+
+TRADE_STREAM_NAME = os.getenv("TRADE_STREAM_NAME", "")
+
+
+def _put_to_kinesis(trades: list[dict[str, Any]]) -> None:
+    """Optionally write trade records to Kinesis for archival via Firehose → S3."""
+    if not TRADE_STREAM_NAME or not trades:
+        return
+    try:
+        import boto3  # type: ignore
+        kinesis = boto3.client("kinesis")
+        records = [
+            {"Data": json.dumps(t).encode(), "PartitionKey": t.get("ticker", "unknown")}
+            for t in trades
+        ]
+        # Kinesis PutRecords accepts up to 500 at a time
+        for i in range(0, len(records), 500):
+            kinesis.put_records(Records=records[i : i + 500], StreamName=TRADE_STREAM_NAME)
+    except Exception as exc:
+        print(f"[ingest_trades] Kinesis put failed (non-fatal): {exc}")
 
 
 def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
@@ -53,6 +75,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
                 max_ts=int(end_time.timestamp()),
             )
             written += batch_write_trades(trades)
+            _put_to_kinesis(trades)
     else:
         trades = fetch_trades(
             ticker=ticker,
@@ -60,6 +83,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
             max_ts=int(end_time.timestamp()),
         )
         written = batch_write_trades(trades)
+        _put_to_kinesis(trades)
         if ticker:
             ingested_tickers.append(ticker)
 

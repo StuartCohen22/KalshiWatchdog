@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { getAnomalies } from "../api/client";
 import type { AnomalyRecord } from "../types";
@@ -91,9 +92,19 @@ export function AnomalyFeed({ refreshToken = 0 }: { refreshToken?: number }) {
       ) : null}
 
       <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
-        {pageSlice.map((anomaly) => (
-          <AnomalyCard key={anomaly.anomaly_id} anomaly={anomaly} />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {pageSlice.map((anomaly, i) => (
+            <motion.div
+              key={anomaly.anomaly_id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.22, delay: i * 0.05 }}
+            >
+              <AnomalyCard anomaly={anomaly} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       {/* Pagination controls */}

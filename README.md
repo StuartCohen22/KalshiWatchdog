@@ -1,97 +1,133 @@
 # Kalshi Watchdog
 
-Prediction-market insider-trading surveillance for Kalshi public trade data.
+Real-time prediction-market surveillance platform. Detects anomalous trading patterns — volume spikes, coordinated bursts, and golden-window positioning — across Kalshi markets and surfaces them through a multi-page React dashboard with LLM-generated case narratives.
 
-## Stack
+---
 
-- Backend: Python 3.12, Lambda-style handlers, DynamoDB, Bedrock helpers
-- Frontend: React 18, TypeScript, Vite, Tailwind CSS, Recharts
-- Infra: SAM template scaffold for DynamoDB, Lambda, API Gateway, EventBridge
+## Quick start
 
-## Local structure
-
-- `backend/`: ingestion, detection, Bedrock analysis, API handlers
-- `frontend/`: dashboard UI
-- `data/known_cases.json`: seeded case studies
-- `scripts/manual_ingest.py`: local ingestion helper
-
-## Local setup
-
-1. Create a Python environment and install `backend/requirements.txt`.
-2. Install frontend dependencies in `frontend/`.
-3. Copy `.env.example` and adjust the local LLM settings for your Qwen endpoint.
-4. Set `VITE_API_BASE_URL` in the frontend only when pointing to a deployed API.
-
-Example backend env:
+### 1. Backend
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+
 cp .env.example .env.local
-export $(grep -v '^#' .env.local | xargs)
-```
+# Edit .env.local — set KALSHI_API_KEY and KALSHI_RSA_KEY_PATH
 
-## Local API
-
-Run the backend API locally without API Gateway:
-
-```bash
-cd /Users/stuartcohen/Documents/GitHub/KalshiWatchdog
-source .venv/bin/activate
 export $(grep -v '^#' .env.local | xargs)
 python -m backend.local_api
 ```
 
-This starts a local server on `http://127.0.0.1:8000`.
+Backend runs at `http://127.0.0.1:8000`.
 
-Useful Kalshi passthrough endpoints:
-
-- `GET /api/kalshi/markets?status=settled&limit=25`
-- `GET /api/kalshi/recon?status=open&limit=8`
-- `GET /api/kalshi/trades?ticker=KXMRBEAST-25AUG01-T100M&limit=200`
-- `GET /api/kalshi/markets/{ticker}/orderbook`
-- `GET /api/kalshi/markets/{ticker}/candlesticks?start_ts=...&end_ts=...&period_interval=60`
-- `POST /api/local/ingest-markets`
-- `POST /api/local/ingest-trades`
-- `POST /api/local/run-detection`
-
-Frontend local env:
-
-```env
-VITE_LOCAL_API_TARGET=http://127.0.0.1:8000
-```
-
-If `VITE_API_BASE_URL` is unset, Vite proxies `/api/*` to `VITE_LOCAL_API_TARGET`, so local development does not need CORS or absolute URLs.
-
-## Frontend + backend together
-
-Terminal 1:
+### 2. Frontend
 
 ```bash
-cd /Users/stuartcohen/Documents/GitHub/KalshiWatchdog
-source .venv/bin/activate
-export $(grep -v '^#' .env.local | xargs)
-python -m backend.local_api
-```
-
-Terminal 2:
-
-```bash
-cd /Users/stuartcohen/Documents/GitHub/KalshiWatchdog/frontend
+cd frontend
 npm install
-cp .env.example .env.local
+cp .env.example .env.local   # VITE_LOCAL_API_TARGET=http://127.0.0.1:8000
 npm run dev
 ```
 
-Open the Vite URL, typically `http://127.0.0.1:5173`.
+Open `http://127.0.0.1:5173`.
 
-Dev behavior:
+### 3. LLM (optional but recommended)
 
-- `/api/known-cases` and `/api/kalshi/*` use the local backend immediately
-- `/api/stats`, `/api/anomalies`, and `/api/markets/{ticker}/trades` use local JSON storage by default
-- the dashboard includes a live Kalshi recon panel plus local ingest/detection controls
-- analysis uses the configured local OpenAI-compatible model endpoint, with heuristic fallback if the model is unavailable
+```bash
+ollama pull qwen2.5
+ollama serve
+```
+
+Detection runs with heuristic fallback if Ollama is unavailable.
+
+---
+
+## Kalshi API credentials
+
+1. Create an account at [kalshi.com](https://kalshi.com) and generate an API key + RSA private key.
+2. Store the private key **outside the repo**:
+
+```bash
+mkdir -p ~/.kalshi
+mv your_key.pem ~/.kalshi/private_key.pem
+chmod 600 ~/.kalshi/private_key.pem
+```
+
+3. Add to `.env.local`:
+
+```env
+KALSHI_API_KEY=your-uuid-api-key
+KALSHI_RSA_KEY_PATH=/Users/yourname/.kalshi/private_key.pem
+```
+
+---
+
+## Seeding data
+
+To pre-populate historical settled markets with trades and anomaly detection:
+
+```bash
+source .env.local && export $(grep -v '^#' .env.local | xargs)
+python scripts/seed_demo.py --days-back 90 --market-limit 20
+```
+
+Add `--no-llm` to skip LLM analysis and seed faster.
+
+Data persists in `local_data/watchdog.db` (SQLite, WAL mode). Use **Reset anomalies** in the dashboard controls to re-run detection without re-seeding, or **Full reset** to start clean.
+
+---
+
+## Dashboard pages
+
+| Page | Route | Contents |
+|---|---|---|
+| Dashboard | `/` | Stats bar, pipeline controls, anomaly feed, live detection stream |
+| Markets | `/markets` | Live Kalshi watchlist — scan trades, view price chart/depth, anomaly badges |
+| Analytics | `/analytics` | Market–anomaly force graph, category/severity breakdowns, timeline scatter |
+| Anomaly detail | `/anomalies/:id` | Cluster chart, context-aware metrics, AI narrative, PDF case export |
+| Market search | `/search` | Full trade-level market lookup |
+| Known cases | `/known-cases` | Historical insider-trading reference cases |
+
+---
+
+## Pipeline
+
+The dashboard **Run full pipeline** button chains three steps:
+
+1. **Ingest markets** — fetches settled markets from the last 30 days via the Kalshi API
+2. **Ingest trades** — fetches full trade history per market (skips already-ingested tickers)
+3. **Run detection** — volume spike, coordinated activity, golden window; LLM narrative enrichment
+
+Individual pipeline steps and the live SSE detection stream are also accessible separately.
+
+---
+
+## Detection algorithms
+
+| Algorithm | Signal |
+|---|---|
+| **Volume spike** | Hourly volume exceeds `mean + N×std` across the market's full trade history |
+| **Coordinated activity** | High-frequency 5-minute trade clusters with directional consistency |
+| **Golden window** | Extreme-probability trades (YES < 5¢ or NO < 5¢) placed shortly before resolution |
+
+---
+
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `KALSHI_API_KEY` | UUID API key from kalshi.com |
+| `KALSHI_RSA_KEY_PATH` | Absolute path to PEM private key (outside repo) |
+| `LOCAL_LLM_BASE_URL` | Ollama endpoint (default: `http://127.0.0.1:11434/v1`) |
+| `LOCAL_LLM_MODEL` | Model name (default: `qwen2.5`) |
+| `VITE_LOCAL_API_TARGET` | Frontend proxy target (default: `http://127.0.0.1:8000`) |
+
+---
 
 ## Notes
 
-- Kalshi API access in this project is unauthenticated and rate-limited conservatively.
-- Bedrock analysis defaults to Claude 3 Haiku in `us-east-1`.
-- The repository is scaffolded for hackathon speed, not enterprise deployment rigor.
+- All data is stored locally in SQLite — no AWS account required to run locally.
+- The `infra/` directory and `template.yaml` scaffold an AWS serverless deployment (DynamoDB + Lambda + API Gateway) for production use.
+- Private keys and `.env*` files are excluded from git via `.gitignore`.

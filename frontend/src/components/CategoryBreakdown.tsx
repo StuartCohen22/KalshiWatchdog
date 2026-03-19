@@ -12,10 +12,10 @@ import {
 import type { AnomalyRecord } from "../types";
 
 const PALETTE = [
-  "#63dcbe",
-  "#fbbf24",
-  "#ff3b5c",
-  "#818cf8",
+  "#00f0ff",
+  "#f59e0b",
+  "#ff2a6d",
+  "#00f0ff",
   "#fb923c",
   "#34d399",
   "#f472b6",

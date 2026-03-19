@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import CountUp from "react-countup";
 
 import { getStats } from "../api/client";
 import type { DashboardStats } from "../types";
@@ -77,9 +78,14 @@ export function StatsBar({ refreshToken = 0 }: { refreshToken?: number }) {
           <div key={key} className="rounded-2xl border border-border-default bg-bg-secondary px-4 py-4">
             <p className="text-xs uppercase tracking-[0.16em] text-text-tertiary">{label}</p>
             <div className="mt-3 flex items-end gap-2">
-              <span className="font-mono text-3xl font-semibold text-text-primary">
-                {key === "detection_rate" ? `${stats[key]}%` : Number(stats[key]).toLocaleString()}
-              </span>
+              <CountUp
+                key={`${key}-${refreshToken}`}
+                end={Number(stats[key])}
+                duration={0.8}
+                separator=","
+                suffix={key === "detection_rate" ? "%" : ""}
+                className="font-mono text-3xl font-semibold text-text-primary"
+              />
             </div>
           </div>
         ))}

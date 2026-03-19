@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from backend.utils.kalshi_client import (
+from utils.kalshi_client import (
     fetch_candlesticks,
     fetch_events,
     fetch_markets,
@@ -14,8 +14,10 @@ from backend.utils.kalshi_client import (
     fetch_trades,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-KNOWN_CASES_PATH = PROJECT_ROOT / "data" / "known_cases.json"
+# Resolve known_cases.json — works both locally (parents[3]) and in Lambda (parents[2])
+_HERE = Path(__file__).resolve()
+_CANDIDATES = [_HERE.parents[3] / "data" / "known_cases.json", _HERE.parents[2] / "data" / "known_cases.json"]
+KNOWN_CASES_PATH = next((p for p in _CANDIDATES if p.exists()), _CANDIDATES[0])
 
 CORS_HEADERS = {
     "Content-Type": "application/json",
@@ -72,7 +74,7 @@ def _path_segments(event: dict[str, Any]) -> list[str]:
 
 
 def _dynamo_helpers() -> dict[str, Any]:
-    from backend.utils import dynamo
+    from utils import dynamo
 
     return {
         "get_anomalies": dynamo.get_anomalies,
@@ -258,7 +260,7 @@ def _recon_priority(market: dict[str, Any]) -> tuple[int, float, int]:
 def _market_recon(status: str = "open", limit: int = 12) -> list[dict[str, Any]]:
     # Serve from SQLite cache if fresh (5-minute TTL)
     try:
-        from backend.utils.dynamo import _sq
+        from utils.dynamo import _sq
         if _sq:
             cache_key = f"recon_v2:{status}:{limit}"
             cached = _sq.get_kalshi_cache(cache_key, ttl_seconds=300)
@@ -333,7 +335,7 @@ def _market_recon(status: str = "open", limit: int = 12) -> list[dict[str, Any]]
 
     # Persist to cache
     try:
-        from backend.utils.dynamo import _sq
+        from utils.dynamo import _sq
         if _sq:
             _sq.set_kalshi_cache(f"recon_v2:{status}:{limit}", result)
     except Exception:
@@ -501,19 +503,19 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, all_trades)
 
     if segments == ["api", "local", "storage-status"] and method == "GET":
-        from backend.utils.dynamo import storage_status
+        from utils.dynamo import storage_status
 
         return _response(200, storage_status())
 
     if segments == ["api", "local", "markets"] and method == "GET":
-        from backend.utils.dynamo import BACKEND, _sq
+        from utils.dynamo import BACKEND, _sq
 
         q = (query.get("q") or "").strip().lower()
         limit = _parse_int(query.get("limit"), 20) or 20
         if _sq:
             markets = _sq.search_markets(q or None, limit)
         else:
-            from backend.utils.dynamo import _read_local
+            from utils.dynamo import _read_local
             all_markets: list[dict[str, Any]] = _read_local("markets")
             if q:
                 all_markets = [
@@ -526,9 +528,11 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, markets)
 
     if segments == ["api", "local", "reset-anomalies"] and method == "POST":
-        from backend.utils import dynamo as _dynamo
+        from utils import dynamo as _dynamo
         if _dynamo._sq:
             return _response(200, _dynamo._sq.reset_anomalies())
+        if _dynamo.BACKEND == "dynamodb":
+            return _response(405, {"error": "Reset not available in cloud mode. Use the AWS console."})
         # Fallback for local JSON backend
         from pathlib import Path
         import json as _json
@@ -541,12 +545,13 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, {"cleared": "anomalies", "anomalies_removed": count})
 
     if segments == ["api", "local", "reset"] and method == "POST":
-        from backend.utils.dynamo import reset_local_store
-
+        from utils.dynamo import BACKEND, reset_local_store
+        if BACKEND == "dynamodb":
+            return _response(405, {"error": "Reset not available in cloud mode. Use the AWS console."})
         return _response(200, reset_local_store())
 
     if segments == ["api", "local", "ingest-markets"] and method == "POST":
-        from backend.lambdas.ingest_markets.handler import lambda_handler as ingest_markets
+        from lambdas.ingest_markets.handler import lambda_handler as ingest_markets
 
         result = ingest_markets(
             {
@@ -559,7 +564,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, result)
 
     if segments == ["api", "local", "ingest-trades"] and method == "POST":
-        from backend.lambdas.ingest_trades.handler import lambda_handler as ingest_trades
+        from lambdas.ingest_trades.handler import lambda_handler as ingest_trades
 
         result = ingest_trades(
             {
@@ -574,7 +579,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, result)
 
     if segments == ["api", "local", "run-detection"] and method == "POST":
-        from backend.lambdas.run_detection.handler import lambda_handler as run_detection
+        from lambdas.run_detection.handler import lambda_handler as run_detection
 
         result = run_detection(
             {
@@ -586,19 +591,21 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         return _response(200, result)
 
     if segments == ["api", "local", "analyze-anomaly"] and method == "POST":
-        from backend.lambdas.analyze_anomaly.handler import lambda_handler as analyze_anomaly
+        from lambdas.analyze_anomaly.handler import lambda_handler as analyze_anomaly
 
         result = analyze_anomaly({"anomaly_id": body.get("anomaly_id")}, None)
         return _response(200, result)
 
     if segments == ["api", "local", "run-history"] and method == "GET":
-        from backend.utils.dynamo import get_run_history
-
-        limit = _parse_int(query.get("limit"), 20) or 20
-        return _response(200, get_run_history(limit=limit))
+        try:
+            from utils.dynamo import get_run_history
+            limit = _parse_int(query.get("limit"), 20) or 20
+            return _response(200, get_run_history(limit=limit))
+        except Exception:
+            return _response(200, [])
 
     if segments == ["api", "kalshi", "explain-market"] and method == "POST":
-        from backend.utils.bedrock import explain_market
+        from utils.bedrock import explain_market
 
         ticker = body.get("ticker", "")
         market_data = body.get("market", {})

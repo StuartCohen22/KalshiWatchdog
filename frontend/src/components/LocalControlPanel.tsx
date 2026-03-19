@@ -26,7 +26,7 @@ function relativeTime(iso: string): string {
 const STEPS = [
   "Ingesting settled markets…",
   "Ingesting full trade history…",
-  "Running detection + Qwen…",
+  "Running detection + Claude…",
 ];
 
 export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () => void }) {
@@ -94,7 +94,7 @@ export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () 
       });
       tradesIngested = "ingested" in tradesResult ? (tradesResult.ingested ?? 0) : 0;
 
-      // Step 3: run detection + Qwen
+      // Step 3: run detection + Claude
       setPipelineStep(3);
       const detectionResult = await runLocalDetection(50, true);
       anomaliesFound = "anomalies_found" in detectionResult ? (detectionResult.anomalies_found ?? 0) : 0;
@@ -102,7 +102,7 @@ export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () 
 
       setMessage(
         `Pipeline complete — ${marketsIngested} markets, ${tradesIngested} trades ingested, ` +
-        `${anomaliesFound} anomalies across ${marketsScored} markets scored with Qwen.`,
+        `${anomaliesFound} anomalies across ${marketsScored} markets scored with Claude 3 Haiku.`,
       );
       await refreshMeta();
     } catch {
@@ -168,7 +168,7 @@ export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () 
         )}
 
         <p className="mt-2 text-xs text-text-tertiary">
-          Ingest settled markets → full trade history → detect anomalies + Qwen analysis
+          Ingest settled markets → full trade history → detect anomalies + Claude 3 Haiku
         </p>
       </div>
 

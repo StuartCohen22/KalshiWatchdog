@@ -4,12 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 import type { AnomalyRecord, KnownCase } from "../types";
 
-const COLOR_HUB = "#63dcbe";
-const COLOR_ANOMALY = "#ff3b5c";
-const COLOR_CASE = "#fbbf24";
-const GLOW_HUB = "rgba(99,220,190,0.18)";
-const GLOW_ANOMALY = "rgba(255,59,92,0.18)";
-const GLOW_CASE = "rgba(251,191,36,0.18)";
+const COLOR_HUB = "#00f0ff";
+const COLOR_ANOMALY = "#ff2a6d";
+const COLOR_CASE = "#f59e0b";
 
 const SEVERITY_R: Record<string, number> = {
   CRITICAL: 8,
@@ -19,9 +16,9 @@ const SEVERITY_R: Record<string, number> = {
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  CRITICAL: "#ff3b5c",
-  HIGH: "#ff8a4c",
-  MEDIUM: "#fbbf24",
+  CRITICAL: "#ff2a6d",
+  HIGH: "#ff9e64",
+  MEDIUM: "#f59e0b",
   LOW: "#64748b",
 };
 
@@ -85,13 +82,7 @@ function buildGraph(
 function nodeColor(node: GraphNode): string {
   if (node.nodeType === "hub") return COLOR_HUB;
   if (node.nodeType === "case") return COLOR_CASE;
-  return COLOR_ANOMALY;
-}
-
-function nodeGlow(node: GraphNode): string {
-  if (node.nodeType === "hub") return GLOW_HUB;
-  if (node.nodeType === "case") return GLOW_CASE;
-  return GLOW_ANOMALY;
+  return SEVERITY_COLOR[node.severity ?? ""] ?? COLOR_ANOMALY;
 }
 
 function nodeCanvasObject(
@@ -102,21 +93,33 @@ function nodeCanvasObject(
   const x = node.x ?? 0;
   const y = node.y ?? 0;
   const r = node.r;
+  const color = nodeColor(node);
+
+  // Animated pulse glow
+  const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 600);
+  const glowAlpha = Math.round(pulse * 40).toString(16).padStart(2, "0");
+
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15 * pulse;
 
   ctx.beginPath();
   ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
-  ctx.fillStyle = nodeGlow(node);
+  ctx.fillStyle = color + glowAlpha;
   ctx.fill();
 
+  ctx.shadowBlur = 0;
+
+  // Filled node
   ctx.beginPath();
   ctx.arc(x, y, r, 0, 2 * Math.PI);
-  ctx.fillStyle = nodeColor(node);
+  ctx.fillStyle = color;
   ctx.fill();
 
+  // Label
   const fontSize = Math.max(10 / globalScale, 3);
   const label = node.label.length > 24 ? `${node.label.slice(0, 22)}…` : node.label;
   ctx.font = `${fontSize}px JetBrains Mono, monospace`;
-  ctx.fillStyle = "#94a3b8";
+  ctx.fillStyle = "#9e9e9e";
   ctx.textAlign = "center";
   ctx.fillText(label, x, y + r + fontSize + 2);
 }
@@ -242,23 +245,27 @@ export function ForceGraph({
 
       <div
         className="flex overflow-hidden rounded-[20px] border border-border-default"
-        style={{ height: HEIGHT, background: "#0d1423" }}
+        style={{ height: HEIGHT, background: "#05050a" }}
       >
         <div ref={containerRef} className="flex-1 overflow-hidden">
           <ForceGraph2D
             graphData={{ nodes: nodes as never[], links: links as never[] }}
             width={graphWidth}
             height={HEIGHT}
-            backgroundColor="#0d1423"
+            backgroundColor="#05050a"
             nodeRelSize={1}
             nodeCanvasObject={nodeCanvasObject as never}
             nodeCanvasObjectMode={() => "replace"}
             onNodeClick={handleNodeClick as never}
-            linkColor={() => "rgba(148,163,184,0.18)"}
+            linkColor={() => "rgba(0,240,255,0.10)"}
             linkWidth={0.8}
+            linkDirectionalParticles={2}
+            linkDirectionalParticleSpeed={0.004}
+            linkDirectionalParticleWidth={1.5}
+            linkDirectionalParticleColor={() => "rgba(0, 240, 255, 0.5)"}
             d3AlphaDecay={0.04}
             d3VelocityDecay={0.35}
-            cooldownTicks={80}
+            cooldownTicks={Infinity}
             nodeLabel={(node: GraphNode) =>
               `${node.label} — ${node.nodeType}${node.severity ? ` (${node.severity})` : ""}`
             }

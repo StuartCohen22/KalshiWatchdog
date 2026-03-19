@@ -88,7 +88,7 @@ BACKEND = _choose_backend()
 
 _sq: Any = None
 if BACKEND == "sqlite":
-    from backend.utils import sqlite_store as _sq  # type: ignore
+    from utils import sqlite_store as _sq  # type: ignore
 
 if BACKEND == "dynamodb":
     boto3 = globals()["_boto3"]

@@ -1,16 +1,62 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Kalshi Watchdog serverless scaffold
+Description: >
+  Kalshi Watchdog — serverless prediction market surveillance platform.
+  12 AWS services: Lambda, DynamoDB (+Streams), S3, EventBridge, Step Functions, Bedrock,
+  API Gateway REST + WebSocket, SNS, Amplify, CloudWatch, X-Ray.
 
+# ──────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────
+Parameters:
+  KalshiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Kalshi API key (UUID)
+  KalshiRsaKeyPem:
+    Type: String
+    NoEcho: true
+    Description: Kalshi RSA private key PEM (full text)
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Email for CRITICAL anomaly alerts (leave blank to skip)
+
+Conditions:
+  HasAlertEmail: !And
+    - !Not [!Equals [!Ref AlertEmail, ""]]
+    - !Not [!Equals [!Ref AlertEmail, "none"]]
+
+# ──────────────────────────────────────────────
+# Globals
+# ──────────────────────────────────────────────
 Globals:
   Function:
     Runtime: python3.12
-    MemorySize: 256
+    MemorySize: 512
     Timeout: 300
     Architectures:
       - arm64
+    Tracing: Active
+    Environment:
+      Variables:
+        STORAGE_BACKEND: dynamodb
+        TRADES_TABLE_NAME: !Ref TradesTable
+        MARKETS_TABLE_NAME: !Ref MarketsTable
+        ANOMALIES_TABLE_NAME: !Ref AnomaliesTable
+        CONNECTIONS_TABLE_NAME: !Ref ConnectionsTable
+        ANALYSIS_BACKEND: bedrock
+        KALSHI_API_KEY: !Ref KalshiApiKey
+        KALSHI_RSA_KEY_PEM: !Ref KalshiRsaKeyPem
 
+# ──────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────
 Resources:
+
+  # ════════════════════════════════════════════
+  # DynamoDB Tables
+  # ════════════════════════════════════════════
   TradesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -86,4 +132,499 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
 
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-connections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ════════════════════════════════════════════
+  # S3 — Raw Data Archive
+  # ════════════════════════════════════════════
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "kalshi-watchdog-raw-${AWS::AccountId}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveOldData
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+
+  # ════════════════════════════════════════════
+  # SNS — Critical Anomaly Alerts
+  # ════════════════════════════════════════════
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: kalshi-watchdog-alerts
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ════════════════════════════════════════════
+  # API Gateway — REST API
+  # ════════════════════════════════════════════
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: kalshi-watchdog-api
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      TracingEnabled: true
+
+  # ════════════════════════════════════════════
+  # API Gateway — WebSocket API
+  # ════════════════════════════════════════════
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: kalshi-watchdog-ws
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: prod
+      AutoDeploy: true
+
+  # — $connect route —
+  WsConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsConnectFunction.Arn}/invocations"
+
+  WsConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$connect"
+      Target: !Sub "integrations/${WsConnectIntegration}"
+
+  WsConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WsConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/$connect"
+
+  # — $disconnect route —
+  WsDisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsDisconnectFunction.Arn}/invocations"
+
+  WsDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$disconnect"
+      Target: !Sub "integrations/${WsDisconnectIntegration}"
+
+  WsDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WsDisconnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/$disconnect"
+
+  # — $default route —
+  WsDefaultIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsConnectFunction.Arn}/invocations"
+
+  WsDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${WsDefaultIntegration}"
+
+  WsDefaultPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WsConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/$default"
+
+  # ════════════════════════════════════════════
+  # Lambda Functions (9 total)
+  # ════════════════════════════════════════════
+
+  # — REST API handler (catches all HTTP routes) —
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.api.handler.lambda_handler
+      MemorySize: 512
+      Timeout: 30
+      Events:
+        ApiProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /
+            Method: ANY
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TradesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnomaliesTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: "*"
+
+  # — Ingest settled markets from Kalshi —
+  IngestMarketsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.ingest_markets.handler.lambda_handler
+      Timeout: 600
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketsTable
+
+  # — Ingest trade history from Kalshi —
+  IngestTradesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.ingest_trades.handler.lambda_handler
+      Timeout: 900
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TradesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketsTable
+
+  # — Run anomaly detection + Bedrock analysis —
+  RunDetectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.run_detection.handler.lambda_handler
+      Timeout: 900
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnomaliesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TradesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: "*"
+
+  # — Analyze single anomaly with Bedrock LLM —
+  AnalyzeAnomalyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.analyze_anomaly.handler.lambda_handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnomaliesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketsTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: "*"
+
+  # — WebSocket $connect —
+  WsConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.ws_connect.handler.lambda_handler
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+
+  # — WebSocket $disconnect —
+  WsDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.ws_disconnect.handler.lambda_handler
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+
+  # — DynamoDB Streams → WebSocket broadcast + SNS alert —
+  WsBroadcastFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambdas.ws_broadcast.handler.lambda_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          WS_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertTopic.TopicName
+        - Statement:
+            Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+      Events:
+        DynamoStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt AnomaliesTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT"]}'
+
+  # ════════════════════════════════════════════
+  # Step Functions — Pipeline Orchestration
+  # ════════════════════════════════════════════
+  PipelineStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: kalshi-watchdog-pipeline
+      Definition:
+        Comment: "Ingest markets → ingest trades → run detection + Bedrock analysis"
+        StartAt: IngestMarkets
+        States:
+          IngestMarkets:
+            Type: Task
+            Resource: !GetAtt IngestMarketsFunction.Arn
+            Parameters:
+              status: settled
+              limit: 200
+            ResultPath: "$.ingestMarketsResult"
+            Next: IngestTrades
+            Retry:
+              - ErrorEquals:
+                  - States.ALL
+                MaxAttempts: 2
+                BackoffRate: 2
+          IngestTrades:
+            Type: Task
+            Resource: !GetAtt IngestTradesFunction.Arn
+            Parameters:
+              settled_only: true
+              market_limit: 50
+              all_history: false
+            ResultPath: "$.ingestTradesResult"
+            Next: RunDetection
+            Retry:
+              - ErrorEquals:
+                  - States.ALL
+                MaxAttempts: 2
+                BackoffRate: 2
+          RunDetection:
+            Type: Task
+            Resource: !GetAtt RunDetectionFunction.Arn
+            Parameters:
+              limit: 50
+              analyze_with_llm: true
+            ResultPath: "$.detectionResult"
+            End: true
+            Retry:
+              - ErrorEquals:
+                  - States.ALL
+                MaxAttempts: 1
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref IngestMarketsFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref IngestTradesFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RunDetectionFunction
+
+  # ════════════════════════════════════════════
+  # EventBridge — Scheduled Pipeline Trigger
+  # ════════════════════════════════════════════
+  PipelineTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: kalshi-watchdog-pipeline-trigger
+      Description: Trigger the surveillance pipeline every 2 hours
+      ScheduleExpression: "rate(2 hours)"
+      State: ENABLED
+      Targets:
+        - Id: StepFunctionTarget
+          Arn: !Ref PipelineStateMachine
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+  # ════════════════════════════════════════════
+  # CloudWatch Dashboard
+  # ════════════════════════════════════════════
+  WatchdogDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: kalshi-watchdog
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Lambda Invocations",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${RunDetectionFunction}"],
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${IngestTradesFunction}"],
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${ApiFunction}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Lambda Errors",
+                "metrics": [
+                  ["AWS/Lambda", "Errors", "FunctionName", "${RunDetectionFunction}"],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${IngestTradesFunction}"],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${ApiFunction}"],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${WsBroadcastFunction}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "API Gateway Latency",
+                "metrics": [
+                  ["AWS/ApiGateway", "Latency", "ApiName", "kalshi-watchdog-api"]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "DynamoDB Read/Write Capacity",
+                "metrics": [
+                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${AnomaliesTable}"],
+                  ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${AnomaliesTable}"],
+                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${TradesTable}"],
+                  ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${TradesTable}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+  # ════════════════════════════════════════════
+  # IAM Roles
+  # ════════════════════════════════════════════
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StartStepFunctions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref PipelineStateMachine
+
+# ──────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: REST API endpoint
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  WebSocketUrl:
+    Description: WebSocket endpoint for real-time anomaly push
+    Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  RawDataBucketName:
+    Description: S3 bucket for raw trade archives
+    Value: !Ref RawDataBucket
+  AlertTopicArn:
+    Description: SNS topic for critical alerts
+    Value: !Ref AlertTopic
+  PipelineStateMachineArn:
+    Description: Step Functions pipeline ARN
+    Value: !Ref PipelineStateMachine
+  CloudWatchDashboard:
+    Description: CloudWatch dashboard
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=kalshi-watchdog"

@@ -5,20 +5,9 @@ import os
 import re
 from typing import Any
 
-import urllib3
-
-ANALYSIS_BACKEND = os.getenv("ANALYSIS_BACKEND", "local").lower()
-LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1").rstrip("/")
-LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5")
+ANALYSIS_BACKEND = os.getenv("ANALYSIS_BACKEND", "bedrock").lower()
 DEFAULT_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
 DEFAULT_REGION = os.getenv("AWS_REGION", "us-east-1")
-
-http = urllib3.PoolManager(
-    headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-)
 
 
 def _prompt(anomaly_data: dict[str, Any], market_data: dict[str, Any]) -> str:
@@ -108,26 +97,6 @@ def _parse_json_response(text: str, fallback: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-def _analyze_with_local_llm(prompt: str, fallback: dict[str, Any]) -> dict[str, Any]:
-    body = {
-        "model": LOCAL_LLM_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 500,
-    }
-    response = http.request("POST", f"{LOCAL_LLM_BASE_URL}/chat/completions", body=json.dumps(body))
-    if response.status >= 400:
-        raise RuntimeError(f"Local LLM request failed with status {response.status}")
-
-    payload = json.loads(response.data.decode("utf-8"))
-    choices = payload.get("choices", [])
-    if not choices:
-        return fallback
-
-    text = choices[0].get("message", {}).get("content", "")
-    return _parse_json_response(text, fallback)
-
-
 def _analyze_with_bedrock(prompt: str, fallback: dict[str, Any]) -> dict[str, Any]:
     import boto3  # type: ignore
 
@@ -208,11 +177,9 @@ def explain_market(market_data: dict[str, Any]) -> dict[str, Any]:
     fallback = _heuristic_market_explain(market_data)
 
     try:
-        if ANALYSIS_BACKEND == "bedrock":
-            return _analyze_with_bedrock(prompt, fallback)
         if ANALYSIS_BACKEND == "heuristic":
             return fallback
-        return _analyze_with_local_llm(prompt, fallback)
+        return _analyze_with_bedrock(prompt, fallback)
     except Exception:
         return fallback
 
@@ -222,10 +189,8 @@ def analyze_anomaly(anomaly_data: dict[str, Any], market_data: dict[str, Any]) -
     fallback = _heuristic_analysis(anomaly_data, market_data)
 
     try:
-        if ANALYSIS_BACKEND == "bedrock":
-            return _analyze_with_bedrock(prompt, fallback)
         if ANALYSIS_BACKEND == "heuristic":
             return fallback
-        return _analyze_with_local_llm(prompt, fallback)
+        return _analyze_with_bedrock(prompt, fallback)
     except Exception:
         return fallback

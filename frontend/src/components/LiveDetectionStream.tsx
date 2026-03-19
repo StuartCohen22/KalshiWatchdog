@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { SeverityBadge } from "./SeverityBadge";
 import type { AnomalyRecord } from "../types";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+const WS_URL = (import.meta.env.VITE_WS_URL ?? "") as string;
 
 type StreamState = "idle" | "running" | "done" | "error";
 
@@ -20,9 +21,9 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  golden_window: "#ff3b5c",
-  coordinated: "#ff8a4c",
-  volume_spike: "#fbbf24",
+  golden_window: "#ff2a6d",
+  coordinated: "#ff9e64",
+  volume_spike: "#f59e0b",
 };
 
 export function LiveDetectionStream({ onComplete }: { onComplete?: () => void }) {
@@ -31,12 +32,81 @@ export function LiveDetectionStream({ onComplete }: { onComplete?: () => void })
   const [stats, setStats] = useState<StreamStats>({ markets: 0, anomaliesFound: 0 });
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigate = useNavigate();
 
-  const startStream = useCallback(() => {
-    if (esRef.current) {
-      esRef.current.close();
-    }
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      esRef.current?.close();
+      wsRef.current?.close();
+      if (keepAliveRef.current) clearInterval(keepAliveRef.current);
+    };
+  }, []);
+
+  /** Kick off the pipeline via REST, then listen for results over WebSocket. */
+  const startWebSocket = useCallback(() => {
+    setAnomalies([]);
+    setError(null);
+    setStats({ markets: 0, anomaliesFound: 0 });
+    setState("running");
+
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    // Keepalive ping every 60s to avoid API Gateway 10-min idle timeout
+    ws.onopen = () => {
+      keepAliveRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: "ping" }));
+        }
+      }, 60_000);
+
+      // Trigger the pipeline via REST after connecting
+      fetch(`${API_BASE_URL}/api/local/run-detection`, { method: "POST" }).catch(() => {
+        /* pipeline trigger is best-effort; Step Functions may also run it */
+      });
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+
+        if (msg.type === "done") {
+          setState("done");
+          ws.close();
+          onComplete?.();
+          return;
+        }
+
+        // Treat any message with anomaly_id as a streamed anomaly
+        if (msg.anomaly_id) {
+          setAnomalies((prev) => [msg as AnomalyRecord, ...prev]);
+          setStats((s) => ({ ...s, anomaliesFound: s.anomaliesFound + 1 }));
+        }
+      } catch {
+        // ignore non-JSON frames
+      }
+    };
+
+    ws.onerror = () => {
+      setState("error");
+      setError("WebSocket connection failed.");
+    };
+
+    ws.onclose = () => {
+      if (keepAliveRef.current) {
+        clearInterval(keepAliveRef.current);
+        keepAliveRef.current = null;
+      }
+      wsRef.current = null;
+    };
+  }, [onComplete]);
+
+  /** SSE fallback for local dev (no VITE_WS_URL set). */
+  const startSSE = useCallback(() => {
+    if (esRef.current) esRef.current.close();
     setAnomalies([]);
     setError(null);
     setStats({ markets: 0, anomaliesFound: 0 });
@@ -74,7 +144,6 @@ export function LiveDetectionStream({ onComplete }: { onComplete?: () => void })
           setError("Detection stream failed.");
         }
       } else {
-        // Network error / server closed connection after done
         if (state !== "done") {
           setState("error");
           setError("Connection lost.");
@@ -85,9 +154,17 @@ export function LiveDetectionStream({ onComplete }: { onComplete?: () => void })
     });
   }, [onComplete, state]);
 
+  const startStream = WS_URL ? startWebSocket : startSSE;
+
   const stop = useCallback(() => {
     esRef.current?.close();
     esRef.current = null;
+    wsRef.current?.close();
+    wsRef.current = null;
+    if (keepAliveRef.current) {
+      clearInterval(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
     setState("idle");
   }, []);
 
@@ -129,7 +206,7 @@ export function LiveDetectionStream({ onComplete }: { onComplete?: () => void })
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-[#ff3b5c]/20 bg-[rgba(255,59,92,0.06)] px-4 py-3 text-sm text-[#ff3b5c]">
+        <p className="mb-4 rounded-xl border border-[#ff2a6d]/20 bg-[rgba(255,59,92,0.06)] px-4 py-3 text-sm text-[#ff2a6d]">
           {error}
         </p>
       )}
@@ -159,7 +236,7 @@ export function LiveDetectionStream({ onComplete }: { onComplete?: () => void })
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-text-primary">{a.market_title}</p>
                   <p className="mt-0.5 text-xs text-text-tertiary">
-                    <span style={{ color: TYPE_COLOR[a.anomaly_type] ?? "#63dcbe" }}>
+                    <span style={{ color: TYPE_COLOR[a.anomaly_type] ?? "#00f0ff" }}>
                       {TYPE_LABEL[a.anomaly_type] ?? a.anomaly_type}
                     </span>
                     {a.hours_before_resolution != null && (

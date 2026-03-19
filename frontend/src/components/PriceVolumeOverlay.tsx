@@ -15,9 +15,9 @@ import type { AnomalyRecord, TradeRecord } from "../types";
 
 // Colors per flagged type — hex only (SVG attributes don't resolve CSS vars)
 const FLAG_COLOR: Record<string, string> = {
-  volume_spike: "#ff3b5c",
-  coordinated: "#ff8a4c",
-  golden_window: "#fbbf24",
+  volume_spike: "#ff2a6d",
+  coordinated: "#ff9e64",
+  golden_window: "#f59e0b",
 };
 
 interface DataPoint {
@@ -98,7 +98,7 @@ export function PriceVolumeOverlay({
     );
   }
 
-  const flagColor = FLAG_COLOR[anomaly.anomaly_type] ?? "#63dcbe";
+  const flagColor = FLAG_COLOR[anomaly.anomaly_type] ?? "#00f0ff";
 
   return (
     <div className="panel h-[360px]">
@@ -166,7 +166,7 @@ export function PriceVolumeOverlay({
             <ReferenceLine
               yAxisId="vol"
               x={anomaly.cluster_start.slice(5, 13)}
-              stroke="#ff8a4c"
+              stroke="#ff9e64"
               strokeDasharray="4 3"
               strokeOpacity={0.6}
             />
@@ -175,7 +175,7 @@ export function PriceVolumeOverlay({
             <ReferenceLine
               yAxisId="vol"
               x={anomaly.cluster_end.slice(5, 13)}
-              stroke="#ff8a4c"
+              stroke="#ff9e64"
               strokeDasharray="4 3"
               strokeOpacity={0.6}
             />
@@ -185,7 +185,7 @@ export function PriceVolumeOverlay({
             {data.map((entry, i) => (
               <Cell
                 key={i}
-                fill={entry.flagType ? FLAG_COLOR[entry.flagType] : "#63dcbe"}
+                fill={entry.flagType ? FLAG_COLOR[entry.flagType] : "#00f0ff"}
                 fillOpacity={entry.flagType ? 0.9 : 0.45}
               />
             ))}

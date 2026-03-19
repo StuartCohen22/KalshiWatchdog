@@ -16,8 +16,9 @@ REQUEST_DELAY_SECONDS = float(os.getenv("KALSHI_REQUEST_DELAY_SECONDS", "0.3"))
 _api_key = os.getenv("KALSHI_API_KEY", "")
 _rsa_key_path = os.getenv("KALSHI_RSA_KEY_PATH", "")
 
-# Load RSA private key once at startup if path is configured
+# Load RSA private key once at startup — from file path or inline PEM env var
 _rsa_key = None
+_rsa_key_pem_env = os.getenv("KALSHI_RSA_KEY_PEM", "")
 if _rsa_key_path:
     try:
         from cryptography.hazmat.primitives import serialization
@@ -26,6 +27,16 @@ if _rsa_key_path:
             _rsa_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
     except Exception as exc:
         print(f"[kalshi_client] Warning: could not load RSA key from {_rsa_key_path}: {exc}")
+
+if not _rsa_key and _rsa_key_pem_env:
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.backends import default_backend
+        _rsa_key = serialization.load_pem_private_key(
+            _rsa_key_pem_env.encode(), password=None, backend=default_backend()
+        )
+    except Exception as exc:
+        print(f"[kalshi_client] Warning: could not load RSA key from KALSHI_RSA_KEY_PEM env: {exc}")
 
 http = urllib3.PoolManager(
     num_pools=4,

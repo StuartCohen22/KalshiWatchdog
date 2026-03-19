@@ -1,8 +1,10 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { Dashboard } from "./views/Dashboard";
+import { Analytics } from "./views/Analytics";
 import { AnomalyDetail } from "./views/AnomalyDetail";
+import { Dashboard } from "./views/Dashboard";
 import { KnownCases } from "./views/KnownCases";
+import { Markets } from "./views/Markets";
 import { MarketSearch } from "./views/MarketSearch";
 
 export default function App() {
@@ -17,7 +19,7 @@ export default function App() {
                 Kalshi Watchdog
               </span>
               <span className="rounded-full border border-border-default px-3 py-1 text-xs uppercase tracking-[0.18em] text-text-secondary">
-                Local Qwen + Kalshi Intel
+                Claude 3 Haiku · Kalshi Intel
               </span>
             </div>
           </div>
@@ -25,6 +27,8 @@ export default function App() {
           <nav className="flex flex-wrap gap-2">
             {[
               { to: "/", label: "Dashboard" },
+              { to: "/markets", label: "Markets" },
+              { to: "/analytics", label: "Analytics" },
               { to: "/search", label: "Market search" },
               { to: "/known-cases", label: "Known cases" },
             ].map((item) => (
@@ -48,6 +52,8 @@ export default function App() {
 
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/markets" element={<Markets />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/anomalies/:anomalyId" element={<AnomalyDetail />} />
           <Route path="/search" element={<MarketSearch />} />
           <Route path="/known-cases" element={<KnownCases />} />

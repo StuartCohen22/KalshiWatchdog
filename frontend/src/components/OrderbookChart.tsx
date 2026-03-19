@@ -110,12 +110,12 @@ export function OrderbookChart({ ticker, onEmpty }: { ticker: string; onEmpty?: 
           />
           <Bar dataKey="yes" stackId="a" radius={[4, 4, 0, 0]}>
             {data.map((entry) => (
-              <Cell key={`yes-${entry.price}`} fill="#63dcbe" fillOpacity={0.8} />
+              <Cell key={`yes-${entry.price}`} fill="#00f0ff" fillOpacity={0.8} />
             ))}
           </Bar>
           <Bar dataKey="no" stackId="a" radius={[4, 4, 0, 0]}>
             {data.map((entry) => (
-              <Cell key={`no-${entry.price}`} fill="#fbbf24" fillOpacity={0.5} />
+              <Cell key={`no-${entry.price}`} fill="#f59e0b" fillOpacity={0.5} />
             ))}
           </Bar>
         </BarChart>

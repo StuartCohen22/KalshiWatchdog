@@ -112,8 +112,8 @@ export function MarketPriceChart({ ticker, onEmpty }: { ticker: string; onEmpty?
           <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
             <defs>
               <linearGradient id={`grad-${ticker}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#63dcbe" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#63dcbe" stopOpacity={0} />
+                <stop offset="5%" stopColor="#00f0ff" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#00f0ff" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke="rgba(148,163,184,0.07)" vertical={false} />
@@ -132,7 +132,7 @@ export function MarketPriceChart({ ticker, onEmpty }: { ticker: string; onEmpty?
               tickFormatter={(v: number) => `${v}%`}
             />
             <Tooltip
-              cursor={{ stroke: "#63dcbe", strokeWidth: 1, strokeDasharray: "4 2" }}
+              cursor={{ stroke: "#00f0ff", strokeWidth: 1, strokeDasharray: "4 2" }}
               contentStyle={{
                 background: "#0f1726",
                 border: "1px solid rgba(148,163,184,0.12)",
@@ -146,11 +146,11 @@ export function MarketPriceChart({ ticker, onEmpty }: { ticker: string; onEmpty?
             <Area
               type="monotone"
               dataKey="price"
-              stroke="#63dcbe"
+              stroke="#00f0ff"
               strokeWidth={1.5}
               fill={`url(#grad-${ticker})`}
               dot={false}
-              activeDot={{ r: 4, fill: "#63dcbe" }}
+              activeDot={{ r: 4, fill: "#00f0ff" }}
             />
           </AreaChart>
         </ResponsiveContainer>
