@@ -1,7 +1,6 @@
 import { useState } from "react";
 
 import { AnomalyFeed } from "../components/AnomalyFeed";
-import { LiveDetectionStream } from "../components/LiveDetectionStream";
 import { LocalControlPanel } from "../components/LocalControlPanel";
 import { StatsBar } from "../components/StatsBar";
 
@@ -23,9 +22,6 @@ export function Dashboard() {
         <LocalControlPanel onPipelineChange={handlePipelineChange} />
         <AnomalyFeed refreshToken={refreshToken} />
       </section>
-
-      {/* ── Live detection stream ── */}
-      <LiveDetectionStream onComplete={handlePipelineChange} />
 
     </div>
   );
