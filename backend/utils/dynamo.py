@@ -435,8 +435,14 @@ def get_stats() -> dict[str, int]:
     if BACKEND == "dynamodb":
         trades_count = trades_table.scan(Select="COUNT").get("Count", 0)
         markets_count = markets_table.scan(Select="COUNT").get("Count", 0)
-        anomalies = anomalies_table.scan().get("Items", [])
-        anomalies = [_from_decimal(item) for item in anomalies]
+        
+        # Scan anomalies and filter out run_history records
+        anomalies_response = anomalies_table.scan()
+        anomalies = [
+            _from_decimal(item) 
+            for item in anomalies_response.get("Items", [])
+            if item.get("_record_type") != "run_history"
+        ]
     else:
         trades = _read_local("trades")
         markets = _read_local("markets")
