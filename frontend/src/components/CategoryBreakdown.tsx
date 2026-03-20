@@ -23,6 +23,7 @@ const PALETTE = [
 ];
 
 function deriveCategory(ticker: string): string {
+  if (!ticker) return "OTHER";
   const prefix = ticker.split("-")[0].replace(/^KX/, "");
   // Abbreviate long prefixes
   if (prefix.length > 10) return prefix.slice(0, 10);
@@ -32,6 +33,7 @@ function deriveCategory(ticker: string): string {
 export function CategoryBreakdown({ anomalies }: { anomalies: AnomalyRecord[] }) {
   const counts = new Map<string, number>();
   for (const a of anomalies) {
+    if (!a.ticker) continue;
     const cat = deriveCategory(a.ticker);
     counts.set(cat, (counts.get(cat) ?? 0) + 1);
   }
