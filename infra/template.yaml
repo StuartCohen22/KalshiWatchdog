@@ -292,7 +292,7 @@ Resources:
       CodeUri: ../backend/
       Handler: lambdas.api.handler.lambda_handler
       MemorySize: 512
-      Timeout: 30
+      Timeout: 900
       Events:
         ApiProxy:
           Type: Api
@@ -307,9 +307,9 @@ Resources:
             Path: /
             Method: ANY
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref TradesTable
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref MarketsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref AnomaliesTable
@@ -467,8 +467,8 @@ Resources:
             Resource: !GetAtt IngestTradesFunction.Arn
             Parameters:
               settled_only: true
-              market_limit: 50
-              all_history: false
+              market_limit: 100
+              all_history: true
             ResultPath: "$.ingestTradesResult"
             Next: RunDetection
             Retry:

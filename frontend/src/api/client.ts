@@ -71,7 +71,7 @@ export function getStorageStatus() {
 }
 
 export function resetAnomalies() {
-  return post<{ cleared: string; anomalies_removed: number }>("/api/local/reset-anomalies");
+  return post<LocalActionResult>("/api/local/reset-anomalies");
 }
 
 export function resetLocalData() {

@@ -514,6 +514,18 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         limit = _parse_int(query.get("limit"), 20) or 20
         if _sq:
             markets = _sq.search_markets(q or None, limit)
+        elif BACKEND == "dynamodb":
+            from utils.dynamo import markets_table, _from_decimal
+            response = markets_table.scan(Limit=min(limit * 5, 500))
+            all_markets = [_from_decimal(item) for item in response.get("Items", [])]
+            if q:
+                all_markets = [
+                    m for m in all_markets
+                    if q in str(m.get("title", "")).lower()
+                    or q in str(m.get("ticker", "")).lower()
+                ]
+            all_markets.sort(key=lambda m: float(m.get("volume", 0) or 0), reverse=True)
+            markets = all_markets[:limit]
         else:
             from utils.dynamo import _read_local
             all_markets: list[dict[str, Any]] = _read_local("markets")
@@ -532,7 +544,14 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         if _dynamo._sq:
             return _response(200, _dynamo._sq.reset_anomalies())
         if _dynamo.BACKEND == "dynamodb":
-            return _response(405, {"error": "Reset not available in cloud mode. Use the AWS console."})
+            from utils.dynamo import anomalies_table
+            items = anomalies_table.scan(ProjectionExpression="anomaly_id").get("Items", [])
+            count = 0
+            with anomalies_table.batch_writer() as batch:
+                for item in items:
+                    batch.delete_item(Key={"anomaly_id": item["anomaly_id"]})
+                    count += 1
+            return _response(200, {"cleared": "anomalies", "anomalies_removed": count})
         # Fallback for local JSON backend
         from pathlib import Path
         import json as _json

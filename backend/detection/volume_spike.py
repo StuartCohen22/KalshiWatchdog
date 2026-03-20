@@ -14,7 +14,7 @@ def detect_volume_spikes(
     threshold_sigma: float = 3.0,
     final_window_hours: int = 24,
 ) -> list[dict[str, Any]]:
-    if market.get("status") != "settled":
+    if market.get("status") not in ("settled", "finalized"):
         return []
 
     hourly_volume: dict[str, float] = defaultdict(float)

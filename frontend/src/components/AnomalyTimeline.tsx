@@ -235,7 +235,7 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
 
             <Scatter
               data={points}
-              shape={(props: Record<string, unknown>) => (
+              shape={(props: unknown) => (
                 <CustomDot
                   {...(props as { cx?: number; cy?: number; payload?: PlotPoint })}
                   onDotClick={handleDotClick}

@@ -15,6 +15,7 @@ export default function App() {
           <div>
             <p className="eyebrow">ECU ACM Spark / AWS Track</p>
             <div className="flex flex-wrap items-center gap-4">
+              <img src="/logo.png" alt="Kalshi Watchdog" className="h-8 w-8" />
               <span className="font-mono text-2xl font-semibold uppercase tracking-[0.18em] text-text-primary">
                 Kalshi Watchdog
               </span>

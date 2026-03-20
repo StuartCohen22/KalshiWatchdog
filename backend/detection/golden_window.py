@@ -13,7 +13,7 @@ def detect_golden_window(
     hours_threshold: int = 48,
     min_total_volume: float = 0,
 ) -> dict[str, Any] | None:
-    if market.get("status") != "settled" or not market.get("result"):
+    if market.get("status") not in ("settled", "finalized") or not market.get("result"):
         return None
 
     winning_side = market["result"]

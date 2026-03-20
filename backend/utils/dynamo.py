@@ -13,7 +13,8 @@ ANOMALIES_TABLE_NAME = os.getenv("ANOMALIES_TABLE_NAME", "kalshi-watchdog-anomal
 STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "sqlite").lower()
 
 LOCAL_DATA_DIR = Path(os.getenv("LOCAL_DATA_DIR", Path(__file__).resolve().parents[2] / "local_data"))
-LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
+if STORAGE_BACKEND != "dynamodb":
+    LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 _store_lock = Lock()
 
@@ -301,13 +302,17 @@ def get_settled_markets(limit: int = 25) -> list[dict[str, Any]]:
         return _sq.get_settled_markets(limit)
 
     if BACKEND == "dynamodb":
-        response = markets_table.query(
-            IndexName="status-close-index",
-            KeyConditionExpression=Key("status").eq("settled"),
-            ScanIndexForward=False,
-            Limit=limit,
-        )
-        return [_from_decimal(item) for item in response.get("Items", [])]
+        results: list[dict[str, Any]] = []
+        for status_val in ("settled", "finalized"):
+            response = markets_table.query(
+                IndexName="status-close-index",
+                KeyConditionExpression=Key("status").eq(status_val),
+                ScanIndexForward=False,
+                Limit=limit,
+            )
+            results.extend(_from_decimal(item) for item in response.get("Items", []))
+        results.sort(key=lambda m: m.get("close_time", ""), reverse=True)
+        return results[:limit]
 
     items = [market for market in _read_local("markets") if market.get("status") in ("settled", "finalized")]
     items.sort(key=lambda item: item.get("close_time", ""), reverse=True)

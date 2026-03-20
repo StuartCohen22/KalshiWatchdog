@@ -32,8 +32,14 @@ if not _rsa_key and _rsa_key_pem_env:
     try:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.backends import default_backend
+        import base64 as _b64
+
+        pem_bytes = _rsa_key_pem_env.encode()
+        # If the value looks base64-encoded (no PEM header), decode it first
+        if not _rsa_key_pem_env.startswith("-----"):
+            pem_bytes = _b64.b64decode(_rsa_key_pem_env)
         _rsa_key = serialization.load_pem_private_key(
-            _rsa_key_pem_env.encode(), password=None, backend=default_backend()
+            pem_bytes, password=None, backend=default_backend()
         )
     except Exception as exc:
         print(f"[kalshi_client] Warning: could not load RSA key from KALSHI_RSA_KEY_PEM env: {exc}")
