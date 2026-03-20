@@ -10,6 +10,9 @@ from typing import Any
 TRADES_TABLE_NAME = os.getenv("TRADES_TABLE_NAME", "kalshi-watchdog-trades")
 MARKETS_TABLE_NAME = os.getenv("MARKETS_TABLE_NAME", "kalshi-watchdog-markets")
 ANOMALIES_TABLE_NAME = os.getenv("ANOMALIES_TABLE_NAME", "kalshi-watchdog-anomalies")
+WATCHLIST_TABLE_NAME = os.getenv("WATCHLIST_TABLE_NAME", "kalshi-watchdog-watchlist")
+USAGE_TABLE_NAME = os.getenv("USAGE_TABLE_NAME", "kalshi-watchdog-usage")
+USER_POOL_ID = os.getenv("USER_POOL_ID", "")
 STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "sqlite").lower()
 
 LOCAL_DATA_DIR = Path(os.getenv("LOCAL_DATA_DIR", Path(__file__).resolve().parents[2] / "local_data"))
@@ -98,6 +101,8 @@ if BACKEND == "dynamodb":
     trades_table = dynamodb.Table(TRADES_TABLE_NAME)
     markets_table = dynamodb.Table(MARKETS_TABLE_NAME)
     anomalies_table = dynamodb.Table(ANOMALIES_TABLE_NAME)
+    watchlist_table = dynamodb.Table(WATCHLIST_TABLE_NAME)
+    usage_table = dynamodb.Table(USAGE_TABLE_NAME)
 
 
 def batch_write_trades(trades: list[dict[str, Any]]) -> int:
@@ -456,6 +461,16 @@ def append_run_history(run: dict[str, Any]) -> None:
     if _sq:
         return _sq.append_run_history(run)
 
+    if BACKEND == "dynamodb":
+        # Store run history as anomaly-type records with a special prefix
+        item = {
+            "anomaly_id": f"run:{run.get('ran_at', '')}",
+            **run,
+            "_record_type": "run_history",
+        }
+        anomalies_table.put_item(Item=_to_decimal(item))
+        return
+
     with _store_lock:
         history = _read_local("run_history")
         history.append(_from_decimal(run))
@@ -469,8 +484,132 @@ def get_run_history(limit: int = 20) -> list[dict[str, Any]]:
     if _sq:
         return _sq.get_run_history(limit)
 
+    if BACKEND == "dynamodb":
+        response = anomalies_table.scan(
+            FilterExpression="attribute_exists(#rt) AND #rt = :v",
+            ExpressionAttributeNames={"#rt": "_record_type"},
+            ExpressionAttributeValues={":v": "run_history"},
+        )
+        items = [_from_decimal(item) for item in response.get("Items", [])]
+        items.sort(key=lambda x: x.get("ran_at", ""), reverse=True)
+        return items[:limit]
+
     history = _read_local("run_history")
     return list(reversed(history))[:limit]
+
+
+def add_to_watchlist(user_id: str, ticker: str, category: str | None = None, notes: str = "") -> None:
+    if _sq:
+        return _sq.add_to_watchlist(user_id, ticker, category, notes)
+
+    if BACKEND == "dynamodb":
+        from datetime import datetime, timezone
+        watchlist_table.put_item(Item={
+            "user_id": user_id,
+            "ticker": ticker,
+            "category": category or "",
+            "notes": notes,
+            "added_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+        return
+
+    with _store_lock:
+        items = _read_local("watchlist")
+        items = [i for i in items if not (i.get("user_id") == user_id and i.get("ticker") == ticker)]
+        from datetime import datetime, timezone
+        items.append({"user_id": user_id, "ticker": ticker, "category": category or "", "notes": notes,
+                       "added_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
+        _write_local("watchlist", items)
+
+
+def remove_from_watchlist(user_id: str, ticker: str) -> None:
+    if _sq:
+        return _sq.remove_from_watchlist(user_id, ticker)
+
+    if BACKEND == "dynamodb":
+        watchlist_table.delete_item(Key={"user_id": user_id, "ticker": ticker})
+        return
+
+    with _store_lock:
+        items = _read_local("watchlist")
+        items = [i for i in items if not (i.get("user_id") == user_id and i.get("ticker") == ticker)]
+        _write_local("watchlist", items)
+
+
+def get_watchlist(user_id: str) -> list[dict[str, Any]]:
+    if _sq:
+        return _sq.get_watchlist(user_id)
+
+    if BACKEND == "dynamodb":
+        response = watchlist_table.query(
+            KeyConditionExpression=Key("user_id").eq(user_id),
+        )
+        items = response.get("Items", [])
+        return sorted(
+            [_from_decimal(i) for i in items],
+            key=lambda x: x.get("added_at", ""),
+            reverse=True,
+        )
+
+    items = [i for i in _read_local("watchlist") if i.get("user_id") == user_id]
+    return sorted(items, key=lambda x: x.get("added_at", ""), reverse=True)
+
+
+def get_categories() -> list[str]:
+    if _sq:
+        return _sq.get_categories()
+
+    if BACKEND == "dynamodb":
+        items = markets_table.scan(ProjectionExpression="category").get("Items", [])
+        cats = sorted({i["category"] for i in items if i.get("category")})
+        return cats
+
+    markets = _read_local("markets")
+    return sorted({m.get("category") for m in markets if m.get("category")})
+
+
+def browse_markets(
+    category: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    if _sq:
+        return _sq.browse_markets(category, status, q, limit)
+
+    if BACKEND == "dynamodb":
+        if status:
+            response = markets_table.query(
+                IndexName="status-close-index",
+                KeyConditionExpression=Key("status").eq(status),
+                ScanIndexForward=False,
+                Limit=min(limit * 5, 500),
+            )
+            items = [_from_decimal(i) for i in response.get("Items", [])]
+        else:
+            response = markets_table.scan(Limit=min(limit * 5, 500))
+            items = [_from_decimal(i) for i in response.get("Items", [])]
+
+        if category:
+            items = [m for m in items if m.get("category") == category]
+        if q:
+            q_lower = q.lower()
+            items = [m for m in items if q_lower in str(m.get("title", "")).lower()
+                     or q_lower in str(m.get("ticker", "")).lower()]
+        items.sort(key=lambda m: float(m.get("volume", 0) or 0), reverse=True)
+        return items[:limit]
+
+    markets = _read_local("markets")
+    if category:
+        markets = [m for m in markets if m.get("category") == category]
+    if status:
+        markets = [m for m in markets if m.get("status") == status]
+    if q:
+        q_lower = q.lower()
+        markets = [m for m in markets if q_lower in str(m.get("title", "")).lower()
+                   or q_lower in str(m.get("ticker", "")).lower()]
+    markets.sort(key=lambda m: float(m.get("volume", 0) or 0), reverse=True)
+    return markets[:limit]
 
 
 def reset_local_store() -> dict[str, Any]:

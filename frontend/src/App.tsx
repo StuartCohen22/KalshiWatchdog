@@ -6,6 +6,7 @@ import { Dashboard } from "./views/Dashboard";
 import { KnownCases } from "./views/KnownCases";
 import { Markets } from "./views/Markets";
 import { MarketSearch } from "./views/MarketSearch";
+import { Watchlist } from "./views/Watchlist";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
               { to: "/markets", label: "Markets" },
               { to: "/analytics", label: "Analytics" },
               { to: "/search", label: "Market search" },
+              { to: "/watchlist", label: "Watchlist" },
               { to: "/known-cases", label: "Known cases" },
             ].map((item) => (
               <NavLink
@@ -57,6 +59,7 @@ export default function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/anomalies/:anomalyId" element={<AnomalyDetail />} />
           <Route path="/search" element={<MarketSearch />} />
+          <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/known-cases" element={<KnownCases />} />
         </Routes>
       </div>

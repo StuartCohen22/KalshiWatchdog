@@ -22,9 +22,28 @@ KNOWN_CASES_PATH = next((p for p in _CANDIDATES if p.exists()), _CANDIDATES[0])
 CORS_HEADERS = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
 }
+
+
+def _get_user_id(event: dict[str, Any]) -> str:
+    """Extract user_id from Cognito authorizer claims, fallback to 'local'."""
+    claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
+    return claims.get("sub") or claims.get("email") or "local"
+
+
+def _get_user_groups(event: dict[str, Any]) -> list[str]:
+    """Extract Cognito groups from authorizer claims."""
+    claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
+    groups_str = claims.get("cognito:groups", "")
+    if not groups_str:
+        return []
+    return [g.strip() for g in groups_str.split(",") if g.strip()]
+
+
+def _is_admin(event: dict[str, Any]) -> bool:
+    return "admin" in _get_user_groups(event)
 
 
 def _json_default(value: Any) -> Any:
@@ -359,6 +378,15 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
     body = _parse_json_body(payload)
     segments = _path_segments(payload)
 
+    # Log usage for admin metrics (non-blocking)
+    user_id = _get_user_id(payload)
+    if user_id != "local":
+        try:
+            from utils.dynamo import log_usage
+            log_usage(user_id, "/".join(segments), method)
+        except Exception:
+            pass
+
     if segments == [] and method == "GET":
         return _response(
             200,
@@ -566,7 +594,19 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
     if segments == ["api", "local", "reset"] and method == "POST":
         from utils.dynamo import BACKEND, reset_local_store
         if BACKEND == "dynamodb":
-            return _response(405, {"error": "Reset not available in cloud mode. Use the AWS console."})
+            from utils.dynamo import trades_table, markets_table, anomalies_table, _from_decimal
+            removed = {"trades": 0, "markets": 0, "anomalies": 0}
+            for tbl, key_name, tbl_label in [
+                (anomalies_table, ["anomaly_id"], "anomalies"),
+                (trades_table, ["ticker", "created_time"], "trades"),
+                (markets_table, ["ticker"], "markets"),
+            ]:
+                items = tbl.scan(ProjectionExpression=", ".join(key_name)).get("Items", [])
+                with tbl.batch_writer() as batch:
+                    for item in items:
+                        batch.delete_item(Key={k: item[k] for k in key_name})
+                        removed[tbl_label] += 1
+            return _response(200, {"cleared": "all", **removed})
         return _response(200, reset_local_store())
 
     if segments == ["api", "local", "ingest-markets"] and method == "POST":
@@ -632,5 +672,79 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
             return _response(400, {"error": "ticker or market required"})
         result = explain_market(market_data or {"ticker": ticker})
         return _response(200, result)
+
+    # ── Watchlist ───────────────────────────────────────────────────────────
+    if segments == ["api", "watchlist"] and method == "GET":
+        from utils.dynamo import get_watchlist, get_market, get_anomalies
+
+        user_id = _get_user_id(payload)
+        items = get_watchlist(user_id)
+        all_anomalies = get_anomalies(limit=500)
+        anomaly_by_ticker: dict[str, int] = {}
+        for a in all_anomalies:
+            t = a.get("ticker")
+            if t:
+                anomaly_by_ticker[t] = anomaly_by_ticker.get(t, 0) + 1
+
+        enriched = []
+        for item in items:
+            ticker = item["ticker"]
+            market = get_market(ticker)
+            enriched.append({
+                **item,
+                "market": market,
+                "has_anomaly": ticker in anomaly_by_ticker,
+                "anomaly_count": anomaly_by_ticker.get(ticker, 0),
+            })
+        return _response(200, enriched)
+
+    if segments == ["api", "watchlist"] and method == "POST":
+        from utils.dynamo import add_to_watchlist
+        user_id = _get_user_id(payload)
+        ticker = body.get("ticker")
+        if not ticker:
+            return _response(400, {"error": "ticker required"})
+        add_to_watchlist(user_id, ticker, body.get("category"), body.get("notes", ""))
+        return _response(200, {"ok": True, "ticker": ticker})
+
+    if len(segments) == 3 and segments[:2] == ["api", "watchlist"] and method == "DELETE":
+        from utils.dynamo import remove_from_watchlist
+        user_id = _get_user_id(payload)
+        remove_from_watchlist(user_id, segments[2])
+        return _response(200, {"ok": True, "removed": segments[2]})
+
+    if segments == ["api", "markets", "categories"] and method == "GET":
+        from utils.dynamo import get_categories
+        return _response(200, get_categories())
+
+    if segments == ["api", "markets", "browse"] and method == "GET":
+        from utils.dynamo import browse_markets as _browse
+        results = _browse(
+            category=query.get("category"),
+            status=query.get("status"),
+            q=query.get("q"),
+            limit=_parse_int(query.get("limit"), 50) or 50,
+        )
+        return _response(200, results)
+
+    # ── Admin ─────────────────────────────────────────────────────────────
+    if segments == ["api", "admin", "stats"] and method == "GET":
+        if not _is_admin(payload):
+            return _response(403, {"error": "Admin access required"})
+        from utils.dynamo import get_admin_stats
+        return _response(200, get_admin_stats())
+
+    if segments == ["api", "admin", "users"] and method == "GET":
+        if not _is_admin(payload):
+            return _response(403, {"error": "Admin access required"})
+        from utils.dynamo import get_admin_users
+        return _response(200, get_admin_users())
+
+    if segments == ["api", "admin", "usage"] and method == "GET":
+        if not _is_admin(payload):
+            return _response(403, {"error": "Admin access required"})
+        from utils.dynamo import get_admin_usage
+        limit = _parse_int(query.get("limit"), 100) or 100
+        return _response(200, get_admin_usage(limit=limit))
 
     return _response(404, {"error": "Not found"})

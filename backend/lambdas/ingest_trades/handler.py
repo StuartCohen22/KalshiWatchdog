@@ -47,6 +47,12 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         already_ingested = set(get_traded_tickers()) if not force else set()
 
         markets = get_settled_markets(limit=market_limit)
+        if not markets:
+            # No markets in local store — auto-ingest so trades have something to work with
+            from lambdas.ingest_markets.handler import lambda_handler as _ingest_markets
+            _ingest_markets({"status": "settled", "limit": market_limit}, None)
+            markets = get_settled_markets(limit=market_limit)
+
         written = 0
         for market in markets:
             t = market.get("ticker")
@@ -95,4 +101,6 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         "settled_only": settled_only,
         "all_history": all_history,
         "ingested_tickers": ingested_tickers,
+        "markets_found": len(markets) if settled_only and not ticker else 0,
+        "skipped_already_ingested": len(already_ingested) if settled_only and not ticker else 0,
     }

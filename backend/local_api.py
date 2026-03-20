@@ -3,10 +3,18 @@ from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from backend.lambdas.api.handler import lambda_handler
+# Add backend/ to sys.path so Lambda-style imports (utils.*, detection.*, lambdas.*)
+# resolve correctly when running locally as `python -m backend.local_api`
+_BACKEND_DIR = str(Path(__file__).resolve().parent)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from lambdas.api.handler import lambda_handler
 
 
 def _normalize_query(query: str) -> dict[str, str]:
@@ -37,6 +45,9 @@ class LocalAPIHandler(BaseHTTPRequestHandler):
         self._handle_request()
 
     def do_POST(self) -> None:
+        self._handle_request()
+
+    def do_DELETE(self) -> None:
         self._handle_request()
 
     def _handle_request(self) -> None:
@@ -87,7 +98,7 @@ class LocalAPIHandler(BaseHTTPRequestHandler):
                 return False
 
         try:
-            from backend.utils.dynamo import (
+            from utils.dynamo import (
                 append_run_history,
                 get_recent_settled_markets_with_trades,
                 get_settled_markets,
@@ -95,7 +106,7 @@ class LocalAPIHandler(BaseHTTPRequestHandler):
                 get_trades_for_market,
                 write_anomaly,
             )
-            from backend.detection import (
+            from detection import (
                 detect_coordinated_activity,
                 detect_golden_window,
                 detect_volume_spikes,

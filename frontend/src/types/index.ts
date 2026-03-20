@@ -131,6 +131,16 @@ export interface LocalStorageStatus {
   };
 }
 
+export interface WatchlistItem {
+  ticker: string;
+  category?: string;
+  notes?: string;
+  added_at: string;
+  market?: MarketRecord;
+  has_anomaly: boolean;
+  anomaly_count: number;
+}
+
 export interface LocalActionResult {
   statusCode?: number;
   ingested?: number;

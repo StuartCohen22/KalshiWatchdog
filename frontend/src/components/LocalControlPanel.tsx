@@ -91,6 +91,7 @@ export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () 
         settledOnly: true,
         marketLimit: 50,
         allHistory: true,
+        force: true,
       });
       tradesIngested = "ingested" in tradesResult ? (tradesResult.ingested ?? 0) : 0;
 

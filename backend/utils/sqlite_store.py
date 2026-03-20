@@ -86,6 +86,13 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             data      TEXT NOT NULL,
             cached_at REAL NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS watchlist (
+            ticker   TEXT PRIMARY KEY,
+            category TEXT,
+            notes    TEXT DEFAULT '',
+            added_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     conn.commit()
 
@@ -384,6 +391,66 @@ def set_kalshi_cache(cache_key: str, data: Any) -> None:
             (cache_key, json.dumps(data), time.time()),
         )
         conn.commit()
+
+
+# ── Watchlist ─────────────────────────────────────────────────────────────────
+
+def add_to_watchlist(ticker: str, category: str | None = None, notes: str = "") -> None:
+    conn = _get_conn()
+    with _lock:
+        conn.execute(
+            "INSERT OR REPLACE INTO watchlist (ticker, category, notes) VALUES (?,?,?)",
+            (ticker, category, notes),
+        )
+        conn.commit()
+
+
+def remove_from_watchlist(ticker: str) -> None:
+    conn = _get_conn()
+    with _lock:
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
+        conn.commit()
+
+
+def get_watchlist() -> list[dict[str, Any]]:
+    conn = _get_conn()
+    rows = conn.execute("SELECT * FROM watchlist ORDER BY added_at DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_categories() -> list[str]:
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM markets WHERE category IS NOT NULL ORDER BY category"
+    ).fetchall()
+    return [r[0] for r in rows if r[0]]
+
+
+def browse_markets(
+    category: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    conn = _get_conn()
+    clauses: list[str] = []
+    params: list[Any] = []
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if q:
+        clauses.append("(lower(title) LIKE ? OR lower(ticker) LIKE ?)")
+        pattern = f"%{q.lower()}%"
+        params.extend([pattern, pattern])
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+    rows = conn.execute(
+        f"SELECT * FROM markets {where} ORDER BY volume DESC LIMIT ?", params
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Reset / status ────────────────────────────────────────────────────────────

@@ -45,6 +45,9 @@ Globals:
         MARKETS_TABLE_NAME: !Ref MarketsTable
         ANOMALIES_TABLE_NAME: !Ref AnomaliesTable
         CONNECTIONS_TABLE_NAME: !Ref ConnectionsTable
+        WATCHLIST_TABLE_NAME: !Ref WatchlistTable
+        USAGE_TABLE_NAME: !Ref UsageTable
+        USER_POOL_ID: !Ref UserPool
         ANALYSIS_BACKEND: bedrock
         KALSHI_API_KEY: !Ref KalshiApiKey
         KALSHI_RSA_KEY_PEM: !Ref KalshiRsaKeyPem
@@ -150,6 +153,41 @@ Resources:
         AttributeName: ttl
         Enabled: true
 
+  WatchlistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-watchlist
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: ticker
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: ticker
+          KeyType: RANGE
+
+  UsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: kalshi-watchdog-usage
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
   # ════════════════════════════════════════════
   # S3 — Raw Data Archive
   # ════════════════════════════════════════════
@@ -182,6 +220,42 @@ Resources:
       Endpoint: !Ref AlertEmail
 
   # ════════════════════════════════════════════
+  # Cognito — User Authentication
+  # ════════════════════════════════════════════
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: kalshi-watchdog-users
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: kalshi-watchdog-web
+      UserPoolId: !Ref UserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admin
+      UserPoolId: !Ref UserPool
+      Description: Admin users with access to usage metrics and user management
+
+  # ════════════════════════════════════════════
   # API Gateway — REST API
   # ════════════════════════════════════════════
   RestApi:
@@ -190,10 +264,16 @@ Resources:
       Name: kalshi-watchdog-api
       StageName: prod
       Cors:
-        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
         AllowOrigin: "'*'"
       TracingEnabled: true
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
 
   # ════════════════════════════════════════════
   # API Gateway — WebSocket API
@@ -313,11 +393,21 @@ Resources:
             TableName: !Ref MarketsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref AnomaliesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WatchlistTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsageTable
         - Statement:
             Effect: Allow
             Action:
               - bedrock:InvokeModel
             Resource: "*"
+        - Statement:
+            Effect: Allow
+            Action:
+              - cognito-idp:ListUsers
+              - cognito-idp:AdminListGroupsForUser
+            Resource: !GetAtt UserPool.Arn
 
   # — Ingest settled markets from Kalshi —
   IngestMarketsFunction:
@@ -628,3 +718,9 @@ Outputs:
   CloudWatchDashboard:
     Description: CloudWatch dashboard
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=kalshi-watchdog"
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient

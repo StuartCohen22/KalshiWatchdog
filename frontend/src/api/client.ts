@@ -8,6 +8,7 @@ import type {
   MarketRecord,
   ReconMarket,
   TradeRecord,
+  WatchlistItem,
 } from "../types";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -85,7 +86,7 @@ export function ingestLocalMarkets(status = "settled", hoursBack = 720, limit = 
 export function ingestLocalTrades(
   hoursBack = 720,
   ticker?: string,
-  options?: { settledOnly?: boolean; marketLimit?: number; allHistory?: boolean },
+  options?: { settledOnly?: boolean; marketLimit?: number; allHistory?: boolean; force?: boolean },
 ) {
   return post<LocalActionResult>("/api/local/ingest-trades", {
     hours_back: hoursBack,
@@ -93,6 +94,7 @@ export function ingestLocalTrades(
     settled_only: options?.settledOnly ?? false,
     market_limit: options?.marketLimit ?? 25,
     all_history: options?.allHistory ?? false,
+    force: options?.force ?? false,
   });
 }
 
@@ -181,4 +183,40 @@ export function searchMarkets(q?: string, limit = 20): Promise<MarketRecord[]> {
   if (q) params.set("q", q);
   params.set("limit", String(limit));
   return request<MarketRecord[]>(`/api/local/markets?${params}`);
+}
+
+// ── Watchlist ──────────────────────────────────────────────────────────────
+
+export function getWatchlist() {
+  return request<WatchlistItem[]>("/api/watchlist");
+}
+
+export function addToWatchlist(ticker: string, category?: string, notes?: string) {
+  return post<{ ok: boolean }>("/api/watchlist", { ticker, category, notes });
+}
+
+export function removeFromWatchlist(ticker: string) {
+  return fetch(`${API_BASE_URL}/api/watchlist/${encodeURIComponent(ticker)}`, {
+    method: "DELETE",
+  }).then((r) => {
+    if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+  });
+}
+
+export function getCategories() {
+  return request<string[]>("/api/markets/categories");
+}
+
+export function browseMarkets(opts: {
+  category?: string;
+  status?: string;
+  q?: string;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts.category) params.set("category", opts.category);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.q) params.set("q", opts.q);
+  params.set("limit", String(opts.limit ?? 50));
+  return request<MarketRecord[]>(`/api/markets/browse?${params}`);
 }
