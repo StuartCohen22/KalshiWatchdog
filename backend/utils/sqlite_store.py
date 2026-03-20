@@ -88,10 +88,12 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS watchlist (
-            ticker   TEXT PRIMARY KEY,
+            user_id  TEXT NOT NULL DEFAULT 'local',
+            ticker   TEXT NOT NULL,
             category TEXT,
             notes    TEXT DEFAULT '',
-            added_at TEXT DEFAULT (datetime('now'))
+            added_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (user_id, ticker)
         );
     """)
     conn.commit()
@@ -395,26 +397,28 @@ def set_kalshi_cache(cache_key: str, data: Any) -> None:
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 
-def add_to_watchlist(ticker: str, category: str | None = None, notes: str = "") -> None:
+def add_to_watchlist(user_id: str, ticker: str, category: str | None = None, notes: str = "") -> None:
     conn = _get_conn()
     with _lock:
         conn.execute(
-            "INSERT OR REPLACE INTO watchlist (ticker, category, notes) VALUES (?,?,?)",
-            (ticker, category, notes),
+            "INSERT OR REPLACE INTO watchlist (user_id, ticker, category, notes) VALUES (?,?,?,?)",
+            (user_id, ticker, category, notes),
         )
         conn.commit()
 
 
-def remove_from_watchlist(ticker: str) -> None:
+def remove_from_watchlist(user_id: str, ticker: str) -> None:
     conn = _get_conn()
     with _lock:
-        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
+        conn.execute("DELETE FROM watchlist WHERE user_id = ? AND ticker = ?", (user_id, ticker))
         conn.commit()
 
 
-def get_watchlist() -> list[dict[str, Any]]:
+def get_watchlist(user_id: str) -> list[dict[str, Any]]:
     conn = _get_conn()
-    rows = conn.execute("SELECT * FROM watchlist ORDER BY added_at DESC").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM watchlist WHERE user_id = ? ORDER BY added_at DESC", (user_id,)
+    ).fetchall()
     return [dict(r) for r in rows]
 
 

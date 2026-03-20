@@ -12,7 +12,7 @@ const accentBySeverity = {
 } as const;
 
 function formatType(type: AnomalyRecord["anomaly_type"]) {
-  return type.replace(/_/g, " ").toUpperCase();
+  return (type ?? "unknown").replace(/_/g, " ").toUpperCase();
 }
 
 function fallbackSummary(anomaly: AnomalyRecord): string {
@@ -38,7 +38,7 @@ export function AnomalyCard({ anomaly }: { anomaly: AnomalyRecord }) {
     <Link
       to={`/anomalies/${anomaly.anomaly_id}`}
       className="group block rounded-[22px] border border-border-default bg-bg-card p-5 shadow-panel transition duration-200 hover:border-border-accent hover:bg-bg-hover"
-      style={{ borderLeft: `4px solid ${accentBySeverity[anomaly.severity]}` }}
+      style={{ borderLeft: `4px solid ${accentBySeverity[anomaly.severity] ?? "var(--text-tertiary)"}` }}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>

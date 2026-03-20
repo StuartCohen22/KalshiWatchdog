@@ -17,15 +17,7 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Kalshi RSA private key PEM (full text)
-  AlertEmail:
-    Type: String
-    Default: ""
-    Description: Email for CRITICAL anomaly alerts (leave blank to skip)
 
-Conditions:
-  HasAlertEmail: !And
-    - !Not [!Equals [!Ref AlertEmail, ""]]
-    - !Not [!Equals [!Ref AlertEmail, "none"]]
 
 # ──────────────────────────────────────────────
 # Globals
@@ -38,6 +30,7 @@ Globals:
     Architectures:
       - arm64
     Tracing: Active
+    Tags: {}
     Environment:
       Variables:
         STORAGE_BACKEND: dynamodb
@@ -204,22 +197,6 @@ Resources:
                 StorageClass: STANDARD_IA
 
   # ════════════════════════════════════════════
-  # SNS — Critical Anomaly Alerts
-  # ════════════════════════════════════════════
-  AlertTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: kalshi-watchdog-alerts
-
-  AlertEmailSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: HasAlertEmail
-    Properties:
-      TopicArn: !Ref AlertTopic
-      Protocol: email
-      Endpoint: !Ref AlertEmail
-
-  # ════════════════════════════════════════════
   # Cognito — User Authentication
   # ════════════════════════════════════════════
   UserPool:
@@ -371,6 +348,7 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.api.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       MemorySize: 512
       Timeout: 900
       Events:
@@ -386,28 +364,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /
             Method: ANY
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref TradesTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref MarketsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref AnomaliesTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref WatchlistTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref UsageTable
-        - Statement:
-            Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource: "*"
-        - Statement:
-            Effect: Allow
-            Action:
-              - cognito-idp:ListUsers
-              - cognito-idp:AdminListGroupsForUser
-            Resource: !GetAtt UserPool.Arn
 
   # — Ingest settled markets from Kalshi —
   IngestMarketsFunction:
@@ -415,10 +371,8 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.ingest_markets.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 600
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref MarketsTable
 
   # — Ingest trade history from Kalshi —
   IngestTradesFunction:
@@ -426,12 +380,8 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.ingest_trades.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 900
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref TradesTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref MarketsTable
 
   # — Run anomaly detection + Bedrock analysis —
   RunDetectionFunction:
@@ -439,20 +389,9 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.run_detection.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 900
       MemorySize: 1024
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref AnomaliesTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref TradesTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref MarketsTable
-        - Statement:
-            Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource: "*"
 
   # — Analyze single anomaly with Bedrock LLM —
   AnalyzeAnomalyFunction:
@@ -460,17 +399,8 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.analyze_anomaly.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 60
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref AnomaliesTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref MarketsTable
-        - Statement:
-            Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource: "*"
 
   # — WebSocket $connect —
   WsConnectFunction:
@@ -478,10 +408,8 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.ws_connect.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 10
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
 
   # — WebSocket $disconnect —
   WsDisconnectFunction:
@@ -489,34 +417,20 @@ Resources:
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.ws_disconnect.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 10
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
 
-  # — DynamoDB Streams → WebSocket broadcast + SNS alert —
+  # — DynamoDB Streams → WebSocket broadcast —
   WsBroadcastFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../backend/
       Handler: lambdas.ws_broadcast.handler.lambda_handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Timeout: 30
       Environment:
         Variables:
           WS_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
-          ALERT_TOPIC_ARN: !Ref AlertTopic
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref ConnectionsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt AlertTopic.TopicName
-        - Statement:
-            Effect: Allow
-            Action:
-              - execute-api:ManageConnections
-            Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
       Events:
         DynamoStream:
           Type: DynamoDB
@@ -535,6 +449,7 @@ Resources:
     Type: AWS::Serverless::StateMachine
     Properties:
       Name: kalshi-watchdog-pipeline
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
       Definition:
         Comment: "Ingest markets → ingest trades → run detection + Bedrock analysis"
         StartAt: IngestMarkets
@@ -578,13 +493,6 @@ Resources:
               - ErrorEquals:
                   - States.ALL
                 MaxAttempts: 1
-      Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref IngestMarketsFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref IngestTradesFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref RunDetectionFunction
 
   # ════════════════════════════════════════════
   # EventBridge — Scheduled Pipeline Trigger
@@ -599,7 +507,7 @@ Resources:
       Targets:
         - Id: StepFunctionTarget
           Arn: !Ref PipelineStateMachine
-          RoleArn: !GetAtt EventBridgeRole.Arn
+          RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
 
   # ════════════════════════════════════════════
   # CloudWatch Dashboard
@@ -674,27 +582,6 @@ Resources:
           ]
         }
 
-  # ════════════════════════════════════════════
-  # IAM Roles
-  # ════════════════════════════════════════════
-  EventBridgeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: StartStepFunctions
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: states:StartExecution
-                Resource: !Ref PipelineStateMachine
 
 # ──────────────────────────────────────────────
 # Outputs
@@ -709,9 +596,6 @@ Outputs:
   RawDataBucketName:
     Description: S3 bucket for raw trade archives
     Value: !Ref RawDataBucket
-  AlertTopicArn:
-    Description: SNS topic for critical alerts
-    Value: !Ref AlertTopic
   PipelineStateMachineArn:
     Description: Step Functions pipeline ARN
     Value: !Ref PipelineStateMachine

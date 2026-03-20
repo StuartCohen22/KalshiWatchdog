@@ -638,3 +638,85 @@ def storage_status() -> dict[str, Any]:
             "anomalies": ANOMALIES_TABLE_NAME,
         },
     }
+
+
+def log_usage(user_id: str, path: str, method: str) -> None:
+    """Non-blocking usage log — only runs in DynamoDB mode."""
+    if BACKEND != "dynamodb":
+        return
+    try:
+        from datetime import datetime, timezone
+        import time as _time
+        now = datetime.now(timezone.utc)
+        usage_table.put_item(Item={
+            "user_id": user_id,
+            "timestamp": now.isoformat().replace("+00:00", "Z"),
+            "path": path,
+            "method": method,
+            "ttl": int(_time.time()) + 60 * 60 * 24 * 30,  # 30-day TTL
+        })
+    except Exception:
+        pass
+
+
+def get_admin_stats() -> dict[str, Any]:
+    if BACKEND == "dynamodb":
+        try:
+            import boto3 as _b3
+            cognito = _b3.client("cognito-idp")
+            users_resp = cognito.list_users(UserPoolId=USER_POOL_ID, Limit=60)
+            total_users = len(users_resp.get("Users", []))
+        except Exception:
+            total_users = 0
+
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+        try:
+            scan = usage_table.scan(
+                FilterExpression="#ts >= :cutoff",
+                ExpressionAttributeNames={"#ts": "timestamp"},
+                ExpressionAttributeValues={":cutoff": cutoff},
+            )
+            requests_24h = scan.get("Count", 0)
+            active_users = len({item["user_id"] for item in scan.get("Items", [])})
+        except Exception:
+            requests_24h = 0
+            active_users = 0
+
+        return {"total_users": total_users, "requests_24h": requests_24h, "active_users": active_users}
+
+    # SQLite / local — return placeholder
+    return {"total_users": 1, "requests_24h": 0, "active_users": 1}
+
+
+def get_admin_users() -> list[dict[str, Any]]:
+    if BACKEND != "dynamodb":
+        return [{"user_id": "local", "email": "local@dev", "created": "", "request_count": 0}]
+    try:
+        import boto3 as _b3
+        cognito = _b3.client("cognito-idp")
+        users_resp = cognito.list_users(UserPoolId=USER_POOL_ID, Limit=60)
+        users = []
+        for u in users_resp.get("Users", []):
+            attrs = {a["Name"]: a["Value"] for a in u.get("Attributes", [])}
+            users.append({
+                "user_id": attrs.get("sub", u.get("Username", "")),
+                "email": attrs.get("email", u.get("Username", "")),
+                "created": u.get("UserCreateDate", "").isoformat() if hasattr(u.get("UserCreateDate", ""), "isoformat") else str(u.get("UserCreateDate", "")),
+                "status": u.get("UserStatus", ""),
+            })
+        return users
+    except Exception:
+        return []
+
+
+def get_admin_usage(limit: int = 100) -> list[dict[str, Any]]:
+    if BACKEND != "dynamodb":
+        return []
+    try:
+        scan = usage_table.scan(Limit=limit)
+        items = [_from_decimal(i) for i in scan.get("Items", [])]
+        items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        return items[:limit]
+    except Exception:
+        return []

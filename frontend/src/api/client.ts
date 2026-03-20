@@ -13,11 +13,27 @@ import type {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
+async function getIdToken(): Promise<string | null> {
+  try {
+    const { fetchAuthSession } = await import("aws-amplify/auth");
+    const session = await fetchAuthSession();
+    return session.tokens?.idToken?.toString() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getIdToken();
+  return {
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      Accept: "application/json",
-    },
+    headers: await authHeaders(),
   });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
@@ -29,7 +45,7 @@ async function post<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
-      Accept: "application/json",
+      ...(await authHeaders()),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body ?? {}),
@@ -196,11 +212,17 @@ export function addToWatchlist(ticker: string, category?: string, notes?: string
 }
 
 export function removeFromWatchlist(ticker: string) {
-  return fetch(`${API_BASE_URL}/api/watchlist/${encodeURIComponent(ticker)}`, {
-    method: "DELETE",
-  }).then((r) => {
-    if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
-  });
+  return getIdToken().then((token) =>
+    fetch(`${API_BASE_URL}/api/watchlist/${encodeURIComponent(ticker)}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).then((r) => {
+      if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+    }),
+  );
 }
 
 export function getCategories() {
