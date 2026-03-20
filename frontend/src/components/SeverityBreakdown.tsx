@@ -22,8 +22,9 @@ const SEVERITY_COLORS: Record<Severity, string> = {
 export function SeverityBreakdown({ anomalies }: { anomalies: AnomalyRecord[] }) {
   const counts = new Map<Severity, number>(SEVERITY_ORDER.map((s) => [s, 0]));
   for (const a of anomalies) {
-    if (counts.has(a.severity)) {
-      counts.set(a.severity, (counts.get(a.severity) ?? 0) + 1);
+    const severity = a.severity as Severity | undefined;
+    if (severity && counts.has(severity)) {
+      counts.set(severity, (counts.get(severity) ?? 0) + 1);
     }
   }
 

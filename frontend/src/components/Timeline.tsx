@@ -27,7 +27,7 @@ export function Timeline({
       timestamp: anomaly.detected_at,
       detail:
         anomaly.llm_reasoning ||
-        `${anomaly.anomaly_type.replace(/_/g, " ")} triggered after ${anomaly.trade_count} trades.`,
+        `${(anomaly.anomaly_type ?? "unknown").replace(/_/g, " ")} triggered after ${anomaly.trade_count ?? 0} trades.`,
     },
     {
       label: "Resolution window",

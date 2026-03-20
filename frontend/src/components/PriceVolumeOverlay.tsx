@@ -51,15 +51,17 @@ function buildOverlay(trades: TradeRecord[], anomaly: AnomalyRecord): DataPoint[
     }
   }
 
+  const anomalyType = anomaly.anomaly_type ?? "unknown";
+
   return [...buckets.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([hour, { volume, prices }]) => {
       let flagType: string | null = null;
-      if (anomaly.anomaly_type === "volume_spike" && hour === anomalyHour) {
+      if (anomalyType === "volume_spike" && hour === anomalyHour) {
         flagType = "volume_spike";
-      } else if (anomaly.anomaly_type === "coordinated" && clusterStart && clusterEnd && hour >= clusterStart && hour <= clusterEnd) {
+      } else if (anomalyType === "coordinated" && clusterStart && clusterEnd && hour >= clusterStart && hour <= clusterEnd) {
         flagType = "coordinated";
-      } else if (anomaly.anomaly_type === "golden_window" && goldenHours.has(hour)) {
+      } else if (anomalyType === "golden_window" && goldenHours.has(hour)) {
         flagType = "golden_window";
       }
       return {
@@ -87,6 +89,7 @@ export function PriceVolumeOverlay({
   trades: TradeRecord[];
   anomaly: AnomalyRecord;
 }) {
+  const anomalyType = anomaly.anomaly_type ?? "unknown";
   const data = buildOverlay(trades, anomaly);
   const label = clusterLabel(anomaly);
 
@@ -98,7 +101,7 @@ export function PriceVolumeOverlay({
     );
   }
 
-  const flagColor = FLAG_COLOR[anomaly.anomaly_type] ?? "#00f0ff";
+  const flagColor = FLAG_COLOR[anomalyType] ?? "#00f0ff";
 
   return (
     <div className="panel h-[360px]">
