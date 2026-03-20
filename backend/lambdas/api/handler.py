@@ -540,8 +540,30 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
 
         q = (query.get("q") or "").strip().lower()
         limit = _parse_int(query.get("limit"), 20) or 20
+        
+        # Helper to check if market has trades
+        def has_trades(ticker: str) -> bool:
+            if _sq:
+                return _sq.has_trades_for_ticker(ticker)
+            elif BACKEND == "dynamodb":
+                from utils.dynamo import trades_table
+                try:
+                    response = trades_table.query(
+                        KeyConditionExpression="ticker = :ticker",
+                        ExpressionAttributeValues={":ticker": ticker},
+                        Limit=1,
+                        ProjectionExpression="ticker"
+                    )
+                    return len(response.get("Items", [])) > 0
+                except Exception:
+                    return False
+            else:
+                from utils.dynamo import _read_local
+                trades = _read_local("trades")
+                return any(t.get("ticker") == ticker for t in trades)
+        
         if _sq:
-            markets = _sq.search_markets(q or None, limit)
+            markets = _sq.search_markets(q or None, limit * 3)  # Fetch more to account for filtering
         elif BACKEND == "dynamodb":
             from utils.dynamo import markets_table, _from_decimal
             response = markets_table.scan(Limit=min(limit * 5, 500))
@@ -553,7 +575,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
                     or q in str(m.get("ticker", "")).lower()
                 ]
             all_markets.sort(key=lambda m: float(m.get("volume", 0) or 0), reverse=True)
-            markets = all_markets[:limit]
+            markets = all_markets
         else:
             from utils.dynamo import _read_local
             all_markets: list[dict[str, Any]] = _read_local("markets")
@@ -564,8 +586,11 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
                     or q in str(m.get("ticker", "")).lower()
                 ]
             all_markets.sort(key=lambda m: float(m.get("volume", 0) or 0), reverse=True)
-            markets = all_markets[:limit]
-        return _response(200, markets)
+            markets = all_markets
+        
+        # Filter to only markets with trades
+        markets_with_trades = [m for m in markets if has_trades(m.get("ticker", ""))]
+        return _response(200, markets_with_trades[:limit])
 
     if segments == ["api", "local", "reset-anomalies"] and method == "POST":
         from utils import dynamo as _dynamo
