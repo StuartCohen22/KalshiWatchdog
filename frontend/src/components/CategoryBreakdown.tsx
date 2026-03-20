@@ -63,7 +63,7 @@ export function CategoryBreakdown({ anomalies }: { anomalies: AnomalyRecord[] })
               <CartesianGrid stroke="rgba(148,163,184,0.07)" horizontal={false} />
               <XAxis
                 type="number"
-                tick={{ fill: "#64748b", fontSize: 10 }}
+                tick={{ fill: "#f1f5f9", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 allowDecimals={false}
@@ -71,7 +71,7 @@ export function CategoryBreakdown({ anomalies }: { anomalies: AnomalyRecord[] })
               <YAxis
                 type="category"
                 dataKey="category"
-                tick={{ fill: "#94a3b8", fontSize: 10 }}
+                tick={{ fill: "#f1f5f9", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 width={72}

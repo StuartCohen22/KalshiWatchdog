@@ -202,7 +202,7 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
               type="number"
               dataKey="x"
               name="hours"
-              tick={{ fill: "#64748b", fontSize: 10 }}
+              tick={{ fill: "#f1f5f9", fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v: number) => `${v}h`}
@@ -210,7 +210,7 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
                 value: "hours relative to resolution →",
                 position: "insideBottom",
                 offset: -20,
-                fill: "#475569",
+                fill: "#f1f5f9",
                 fontSize: 10,
               }}
             />
@@ -221,7 +221,7 @@ export function AnomalyTimeline({ anomalies }: { anomalies: AnomalyRecord[] }) {
               domain={[0.5, 4.5]}
               ticks={[1, 2, 3, 4]}
               tickFormatter={yTickFormatter}
-              tick={{ fill: "#64748b", fontSize: 10 }}
+              tick={{ fill: "#f1f5f9", fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               width={40}

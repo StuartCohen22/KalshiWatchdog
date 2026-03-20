@@ -119,14 +119,14 @@ export function MarketPriceChart({ ticker, onEmpty }: { ticker: string; onEmpty?
             <CartesianGrid stroke="rgba(148,163,184,0.07)" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: "#475569", fontSize: 10 }}
+              tick={{ fill: "#f1f5f9", fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
               domain={[0, 100]}
-              tick={{ fill: "#475569", fontSize: 10 }}
+              tick={{ fill: "#f1f5f9", fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v: number) => `${v}%`}

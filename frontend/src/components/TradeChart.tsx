@@ -46,8 +46,8 @@ export function TradeChart({
       <ResponsiveContainer width="100%" height="85%">
         <BarChart data={data}>
           <CartesianGrid stroke="rgba(148, 163, 184, 0.08)" vertical={false} />
-          <XAxis dataKey="hour" tick={{ fill: "#64748b", fontSize: 11 }} />
-          <YAxis tick={{ fill: "#64748b", fontSize: 11 }} />
+          <XAxis dataKey="hour" tick={{ fill: "#f1f5f9", fontSize: 11 }} />
+          <YAxis tick={{ fill: "#f1f5f9", fontSize: 11 }} />
           <Tooltip
             cursor={{ fill: "rgba(99, 220, 190, 0.06)" }}
             contentStyle={{

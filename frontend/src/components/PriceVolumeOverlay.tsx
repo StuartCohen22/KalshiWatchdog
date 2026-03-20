@@ -127,7 +127,7 @@ export function PriceVolumeOverlay({
           <CartesianGrid stroke="rgba(148,163,184,0.07)" vertical={false} />
           <XAxis
             dataKey="hour"
-            tick={{ fill: "#64748b", fontSize: 10 }}
+            tick={{ fill: "#f1f5f9", fontSize: 10 }}
             tickLine={false}
             axisLine={false}
             interval="preserveStartEnd"
@@ -135,7 +135,7 @@ export function PriceVolumeOverlay({
           <YAxis
             yAxisId="vol"
             orientation="left"
-            tick={{ fill: "#64748b", fontSize: 10 }}
+            tick={{ fill: "#f1f5f9", fontSize: 10 }}
             tickLine={false}
             axisLine={false}
           />
@@ -143,7 +143,7 @@ export function PriceVolumeOverlay({
             yAxisId="price"
             orientation="right"
             domain={[0, 100]}
-            tick={{ fill: "#64748b", fontSize: 10 }}
+            tick={{ fill: "#f1f5f9", fontSize: 10 }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) => `${v}%`}

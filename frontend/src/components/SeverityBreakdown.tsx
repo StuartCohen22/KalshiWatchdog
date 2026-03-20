@@ -61,12 +61,12 @@ export function SeverityBreakdown({ anomalies }: { anomalies: AnomalyRecord[] })
               <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
                 <XAxis
                   dataKey="severity"
-                  tick={{ fill: "#64748b", fontSize: 10 }}
+                  tick={{ fill: "#f1f5f9", fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  tick={{ fill: "#64748b", fontSize: 10 }}
+                  tick={{ fill: "#f1f5f9", fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}

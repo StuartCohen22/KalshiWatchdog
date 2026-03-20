@@ -86,12 +86,12 @@ export function OrderbookChart({ ticker, onEmpty }: { ticker: string; onEmpty?: 
           <CartesianGrid stroke="rgba(148,163,184,0.07)" vertical={false} />
           <XAxis
             dataKey="price"
-            tick={{ fill: "#475569", fontSize: 10 }}
+            tick={{ fill: "#f1f5f9", fontSize: 10 }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) => `${v}%`}
           />
-          <YAxis tick={{ fill: "#475569", fontSize: 10 }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fill: "#f1f5f9", fontSize: 10 }} tickLine={false} axisLine={false} />
           <Tooltip
             contentStyle={{
               background: "#0f1726",
