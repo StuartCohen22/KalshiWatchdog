@@ -6,7 +6,6 @@ import {
   ingestLocalMarkets,
   ingestLocalTrades,
   resetAnomalies,
-  resetLocalData,
   runLocalDetection,
 } from "../api/client";
 // ingestLocalMarkets, ingestLocalTrades, runLocalDetection kept for runFullPipeline
@@ -195,24 +194,6 @@ export function LocalControlPanel({ onPipelineChange }: { onPipelineChange?: () 
         </button>
         <p className="mt-2 text-xs text-text-tertiary">
           Removes flagged anomalies only — keeps all trade and market data so you can re-run detection without reseeding.
-        </p>
-
-        <button
-          type="button"
-          className="button-secondary mt-3 w-full opacity-60 hover:opacity-100"
-          disabled={isAnyBusy}
-          onClick={() =>
-            runAction(
-              "FullReset",
-              () => resetLocalData(),
-              () => "All data cleared. Run the seed script to repopulate.",
-            )
-          }
-        >
-          {busy === "FullReset" ? "Clearing…" : "Full reset"}
-        </button>
-        <p className="mt-2 text-xs text-text-tertiary">
-          Wipes everything — trades, markets, and anomalies. Requires reseeding.
         </p>
       </div>
 
