@@ -11,10 +11,8 @@ import { MarketSearch } from "./views/MarketSearch";
 import { Watchlist } from "./views/Watchlist";
 import { Admin } from "./views/Admin";
 
-// If Cognito env vars are absent, skip auth entirely (local dev)
-const AUTH_ENABLED = !!(
-  import.meta.env.VITE_USER_POOL_ID && import.meta.env.VITE_USER_POOL_CLIENT_ID
-);
+// Auth disabled for demo
+const AUTH_ENABLED = false;
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();

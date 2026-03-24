@@ -9,10 +9,13 @@ import {
 } from "aws-amplify/auth";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+// Auth disabled for demo
+const AUTH_ENABLED = false;
+
 const userPoolId = import.meta.env.VITE_USER_POOL_ID as string | undefined;
 const userPoolClientId = import.meta.env.VITE_USER_POOL_CLIENT_ID as string | undefined;
 
-if (userPoolId && userPoolClientId) {
+if (AUTH_ENABLED && userPoolId && userPoolClientId) {
   Amplify.configure({
     Auth: {
       Cognito: {
@@ -55,6 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    // Auth disabled for demo
+    if (!AUTH_ENABLED) {
+      setLoading(false);
+      return;
+    }
     // If Cognito isn't configured (local dev without env vars), skip auth
     if (!userPoolId || !userPoolClientId) {
       setLoading(false);
