@@ -2,7 +2,6 @@
 
 Real-time prediction-market surveillance platform. Detects anomalous trading patterns — volume spikes, coordinated bursts, and golden-window positioning — across Kalshi markets and surfaces them through a multi-page React dashboard with AI-generated case narratives powered by Claude 3 Haiku.
 
-**Live Demo:** [Deployed on AWS Amplify](https://main.d1a2b3c4d5e6f7.amplifyapp.com) *(replace with your actual Amplify URL)*
 
 ---
 
